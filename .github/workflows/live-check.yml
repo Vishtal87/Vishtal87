@@ -1,0 +1,60 @@
+# Real-world check from GitHub's network: verifies the candidate sources of Krasnodar Krai and Russia and, with
+# pipeline=true, collects their current news once, runs the whole pipeline with the full GeoNames gazetteer and
+# prints where every story was placed and why (scripts/live_report.py). Nothing is deployed or stored.
+# Note: GitHub runners are abroad; a Russian site that serves only Russian visitors fails here but may work
+# on the server.
+name: live-check
+on:
+  workflow_dispatch:
+    inputs:
+      pipeline:
+        description: "Also collect and process the news (true/false)"
+        default: "true"
+      countries:
+        description: "GeoNames countries to load"
+        default: "RU"
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    services:
+      db:
+        image: postgis/postgis:16-3.4
+        env: {POSTGRES_USER: geonews, POSTGRES_PASSWORD: geonews, POSTGRES_DB: geonews}
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U geonews" --health-interval 5s --health-timeout 5s --health-retries 30
+    env:
+      GEONEWS_DSN: postgresql://geonews:geonews@127.0.0.1:5432/geonews
+      GEONEWS_USER_AGENT: "GeoNewsBot/1.0 (+https://github.com/Vishtal87/Vishtal87)"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11", cache: pip, cache-dependency-path: backend/pyproject.toml}
+      - uses: actions/setup-node@v4
+        with: {node-version: 22}
+      - name: Install
+        run: pip install -e backend
+      - name: Verify candidate sources
+        working-directory: backend
+        run: python -m geonews.cli check-sources sources.ru.candidates.yaml --out config/sources.live.yaml
+      - name: Gazetteer (offline bundle + GeoNames)
+        if: inputs.pipeline == 'true'
+        env:
+          COUNTRIES: ${{ inputs.countries }}
+        run: |
+          sh scripts/fetch_offline_data.sh
+          python -m geonews.cli migrate
+          python -m geonews.cli load-categories
+          python -m geonews.cli import-offline
+          python -m geonews.cli import-geonames $COUNTRIES --download
+      - name: Collect and process once
+        if: inputs.pipeline == 'true'
+        run: |
+          python -m geonews.cli load-sources sources.live.yaml
+          python -m geonews.cli worker ingest --once
+          python -m geonews.cli worker process --once
+          python -m geonews.cli worker maintenance --once
+      - name: Report
+        if: inputs.pipeline == 'true'
+        run: python scripts/live_report.py
