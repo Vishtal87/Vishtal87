@@ -20,6 +20,10 @@ jobs:
           host=$(echo "$BASE" | sed -E 's#^[a-z]+://##; s#[:/].*$##'); echo "::add-mask::$host"
           code() { curl -s -o /dev/null -m 20 -w "%{http_code}" "$1"; }
           echo "page       $(code "$BASE/")"
+          echo "--- response headers of / (who answers there):"
+          curl -sI -m 15 "$BASE/" | grep -iE "^(HTTP|server|x-powered-by|location|content-type)" || true
+          echo "--- page title:"
+          curl -s -m 15 "$BASE/" | grep -io "<title>[^<]*" | head -1 || true
           echo "health     $(code "$BASE/api/health")"
           curl -fsS -m 20 "$BASE/api/health" | python3 -c "import sys,json; d=json.load(sys.stdin); print('status', d.get('status'), 'sources', d.get('sources'), 'events', d.get('events'), 'queue', d.get('queue'))" || echo "health body unavailable"
           curl -fsS -m 30 "$BASE/api/map/aggregate?level=country&lang=ru&window=24h" | python3 -c "import sys,json; d=json.load(sys.stdin); print('countries', [(f['properties']['name'], f['properties']['count']) for f in d['features']][:10], 'total', (d.get('meta') or {}).get('total_events'))" || echo "aggregate unavailable"
