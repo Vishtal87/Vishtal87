@@ -1,0 +1,11 @@
+**/node_modules
+**/.venv
+**/__pycache__
+**/*.pyc
+**/dist
+.git
+.run
+data
+frontend/public/glyphs
+frontend/e2e
+backend/tests

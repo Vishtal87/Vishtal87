@@ -81,7 +81,9 @@ def load_places(conn: psycopg.Connection, records: Iterable[PlaceRec], batch_lab
                    source, source_id, admin_code, kind, kind_rank, place_class, local_type, feature_code,
                    name, names, country_code, population, importance,
                    CASE WHEN lat IS NULL THEN NULL ELSE ST_SetSRID(ST_MakePoint(lon, lat), 4326) END,
-                   CASE WHEN area_wkt IS NULL THEN NULL ELSE ST_Multi(ST_CollectionExtract(ST_MakeValid(ST_GeomFromText(area_wkt, 4326)), 3)) END,
+                   -- boundaries may arrive with continuous longitudes past +-180: split and move them back into range
+                   CASE WHEN area_wkt IS NULL THEN NULL ELSE ST_Multi(ST_CollectionExtract(ST_MakeValid(
+                     ST_WrapX(ST_WrapX(ST_MakeValid(ST_GeomFromText(area_wkt, 4326)), 180, -360), -180, 360)), 3)) END,
                    timezone, meta
             FROM stage_entity
             ORDER BY source, source_id

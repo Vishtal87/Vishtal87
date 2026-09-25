@@ -10,7 +10,8 @@ def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="geonews")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("migrate", help="apply SQL migrations")
-    sub.add_parser("import-offline", help="import the offline gazetteer bundle (GeoNames cities500 + admin names)")
+    io = sub.add_parser("import-offline", help="import the offline gazetteer bundle (GeoNames cities500 + admin names)")
+    io.add_argument("--if-empty", action="store_true", help="skip when the gazetteer is already loaded")
     g = sub.add_parser("import-geonames", help="import full GeoNames dumps (every village/hamlet)")
     g.add_argument("countries", nargs="+", help="country codes (RU DE US ...) or allCountries")
     g.add_argument("--dir", default=None, help="dump directory (default: data/geonames)")
@@ -33,8 +34,15 @@ def main(argv: list[str] | None = None) -> None:
 
         print("applied:", migrate() or "nothing")
     elif args.cmd == "import-offline":
+        from geonews.db.pool import connect
         from geonews.gazetteer.service import import_offline
 
+        if args.if_empty:
+            with connect() as conn:
+                n = conn.execute("SELECT count(*) AS n FROM geo_entity WHERE kind = 'locality'").fetchone()["n"]
+            if n > 0:
+                print(f"gazetteer already loaded ({n} localities), skipping")
+                return
         print("entities:", import_offline())
     elif args.cmd == "import-geonames":
         from geonews.config import settings

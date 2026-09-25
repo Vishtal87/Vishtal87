@@ -33,6 +33,9 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 include = ["geonews*"]
 
+[tool.setuptools.package-data]
+"geonews.db" = ["migrations/*.sql"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = ["db: tests that need a PostgreSQL/PostGIS database (GEONEWS_TEST_DSN)"]

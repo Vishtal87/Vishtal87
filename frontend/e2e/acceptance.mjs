@@ -5,6 +5,13 @@ import { chromium } from 'playwright'
 const BASE = process.argv[2] ?? 'http://localhost:5173'
 const DEVSTAND = process.env.DEVSTAND ?? 'http://127.0.0.1:8090'
 const results = []
+
+// precondition: live-release steps need a fresh stand (restart devstand + `geonews reset-news` between runs)
+const standState = await fetch(`${DEVSTAND}/control/state`).then((r) => r.json())
+if (!standState.queued.includes('nov-1')) {
+  console.error(`devstand is not fresh (queued: ${standState.queued}); restart devstand and run \`geonews reset-news\``)
+  process.exit(2)
+}
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark', locale: 'ru-RU' })
 const page = await ctx.newPage()
@@ -34,6 +41,8 @@ async function search(q, contextHint) {
   if (idx < 0) idx = 0
   await items.nth(idx).click()
   await page.waitForTimeout(3500)
+  // regression: the picked name written into the field must not reopen the dropdown over the map
+  if (await page.locator('.search__results').count()) throw new Error('search dropdown reopened after pick')
   return texts[idx].replace(/\s+/g, ' ')
 }
 
@@ -96,7 +105,8 @@ await step(8, 'Получить связанные новости', async () => 
 })
 
 await step(9, 'Увидеть несколько разных источников', async () => {
-  await page.locator('.event-row', { hasText: 'загорелся частный дом' }).first().click()
+  // the headline may later switch to the official source's wording once it reports -> match both
+  await page.locator('.event-row', { hasText: /загорелся частный дом|Пожар в Динской/ }).first().click()
   await page.waitForTimeout(3000)
   const names = await page.locator('.source__name').allInnerTexts()
   if (new Set(names).size < 4) throw new Error(`sources: ${names}`)

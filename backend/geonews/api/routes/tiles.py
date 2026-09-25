@@ -26,8 +26,10 @@ def _tile(z: int, x: int, y: int, lang: str) -> bytes:
     with connection() as conn:
         row = conn.execute(
             """
+            -- The index filter box is expanded in degrees AFTER the transform: transforming a margin-expanded
+            -- envelope wraps lon 183.6 -> -176.4 at the antimeridian and selects the opposite hemisphere.
             WITH b AS (SELECT ST_TileEnvelope(%(z)s, %(x)s, %(y)s) AS env,
-                              ST_Transform(ST_TileEnvelope(%(z)s, %(x)s, %(y)s, margin => 0.02), 4326) AS env4326),
+                              ST_Expand(ST_Transform(ST_TileEnvelope(%(z)s, %(x)s, %(y)s), 4326), %(margin_deg)s) AS env4326),
             c AS (
               SELECT g.id, coalesce(g.names->>%(lang)s, g.name) AS name,
                      ST_AsMVTGeom(ST_SimplifyPreserveTopology(ST_Transform(g.area, 3857), %(tol)s), b.env, 4096, 64, true) AS geom
@@ -45,7 +47,7 @@ def _tile(z: int, x: int, y: int, lang: str) -> bytes:
             SELECT coalesce((SELECT ST_AsMVT(c, 'countries', 4096, 'geom') FROM c WHERE c.geom IS NOT NULL), ''::bytea)
                 || coalesce((SELECT ST_AsMVT(p, 'places', 4096, 'geom') FROM p WHERE p.geom IS NOT NULL), ''::bytea) AS mvt
             """,
-            {"z": z, "x": x, "y": y, "tol": tol, "lang": lang, "minpop": min_pop},
+            {"z": z, "x": x, "y": y, "tol": tol, "lang": lang, "minpop": min_pop, "margin_deg": 360.0 / 2**z * 0.02},
         ).fetchone()
     return bytes(row["mvt"] or b"")
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import html
+import os
 import threading
 from datetime import datetime, timedelta, timezone
 from email.utils import format_datetime
@@ -113,7 +114,8 @@ def create_app(stand: Stand) -> FastAPI:
 
     @app.middleware("http")
     async def remember_base(request: Request, call_next):
-        base["url"] = str(request.base_url).rstrip("/")
+        # links must work in the viewer's browser (compose: the worker fetches http://devstand:8090)
+        base["url"] = os.environ.get("DEVSTAND_PUBLIC_URL") or str(request.base_url).rstrip("/")
         return await call_next(request)
 
     def link(r: dict) -> str:
@@ -279,6 +281,7 @@ def main() -> None:
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=8090)
+    ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--auto-release-every", type=float, default=0, help="seconds between automatic live releases")
     a = ap.parse_args()
     stand = Stand()
@@ -289,7 +292,7 @@ def main() -> None:
                 time.sleep(a.auto_release_every)
                 stand.release(1)
         threading.Thread(target=loop, daemon=True).start()
-    uvicorn.run(create_app(stand), host="127.0.0.1", port=a.port, log_level="warning")
+    uvicorn.run(create_app(stand), host=a.host, port=a.port, log_level="warning")
 
 
 if __name__ == "__main__":

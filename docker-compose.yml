@@ -1,0 +1,57 @@
+# LIVE GEO NEWS — full stack.  `docker compose --profile demo up --build`  -> http://localhost:8080
+# Without the demo profile no synthetic sources run: set GEONEWS_SOURCES=sources.example.yaml (real sources).
+x-backend: &backend
+  build: { context: ., dockerfile: backend/Dockerfile }
+  image: geonews-backend
+  environment:
+    GEONEWS_DSN: postgresql://geonews:geonews@db:5432/geonews
+    GEONEWS_SOURCES: ${GEONEWS_SOURCES:-sources.demo.yaml}
+    DEVSTAND_URL: http://devstand:8090
+    GEONEWS_CORS: http://localhost:8080
+  depends_on:
+    db: { condition: service_healthy }
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment: { POSTGRES_USER: geonews, POSTGRES_PASSWORD: geonews, POSTGRES_DB: geonews }
+    command: ["postgres", "-c", "shared_buffers=1GB", "-c", "work_mem=32MB", "-c", "effective_cache_size=4GB"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    # -h 127.0.0.1: the image's first-boot init server listens on the unix socket only; wait for the real TCP server
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U geonews -d geonews"], interval: 3s, timeout: 3s, retries: 40 }
+
+  setup:            # one-shot: schema, gazetteer (first run ~4 min), categories, source registry
+    <<: *backend
+    command: ["sh", "-c", "python -m geonews.cli migrate && python -m geonews.cli load-categories && python -m geonews.cli import-offline --if-empty && python -m geonews.cli load-sources"]
+    restart: "no"
+
+  api:
+    <<: *backend
+    command: ["python", "-m", "geonews.cli", "api", "--host", "0.0.0.0", "--port", "8000"]
+    depends_on: { setup: { condition: service_completed_successfully } }
+    restart: unless-stopped
+
+  worker:           # ingest + processing + maintenance (scale out: run several `process` workers)
+    <<: *backend
+    command: ["python", "-m", "geonews.cli", "worker", "all"]
+    depends_on: { setup: { condition: service_completed_successfully } }
+    restart: unless-stopped
+
+  web:
+    build: { context: ., dockerfile: frontend/Dockerfile }
+    image: geonews-web
+    ports: ["8080:80"]
+    depends_on: [api]
+    restart: unless-stopped
+
+  devstand:         # synthetic sources for demos/tests only
+    <<: *backend
+    profiles: [demo]
+    command: ["python", "-m", "devstand.server", "--host", "0.0.0.0", "--port", "8090"]
+    working_dir: /app
+    environment: { DEVSTAND_PUBLIC_URL: "http://localhost:8090" }
+    ports: ["8090:8090"]
+    depends_on: []
+
+volumes:
+  pgdata:

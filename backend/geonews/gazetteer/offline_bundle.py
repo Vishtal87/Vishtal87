@@ -60,9 +60,26 @@ def _ring(arcs: list, idxs: list[int]) -> list[tuple[float, float]]:
     for i in idxs:
         seg = arcs[i] if i >= 0 else list(reversed(arcs[~i]))
         pts.extend(seg if not pts else seg[1:])
-    if pts and pts[0] != pts[-1]:
-        pts.append(pts[0])
-    return pts
+    return _unwrap_ring(pts)
+
+
+def _unwrap_ring(pts: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    """world-atlas rings are stitched across the antimeridian (spherical, for d3). Read as planar they get bogus
+    half-world edges (Chukotka joined to Kola -> latitude bands). Make longitudes continuous instead (Chukotka
+    becomes 180..191) and close rings around a pole through the pole; the loader then splits at +-180 (ST_WrapX)."""
+    if len(pts) < 3:
+        return pts
+    out = [pts[0]]
+    for x, y in pts[1:]:
+        px = out[-1][0]
+        x += 360.0 * round((px - x) / 360.0)
+        out.append((x, y))
+    if abs(out[-1][0] - out[0][0]) > 180:            # winds once around the globe -> encloses a pole
+        pole = -90.0 if sum(y for _, y in out) < 0 else 90.0
+        out += [(out[-1][0], pole), (out[0][0], pole)]
+    elif out[-1] == out[0]:
+        return out
+    return out + [out[0]]
 
 
 def _wkt_polygon(arcs, poly) -> str | None:
@@ -70,6 +87,8 @@ def _wkt_polygon(arcs, poly) -> str | None:
     rings = [r for r in rings if len(r) >= 4]
     if not rings:
         return None
+    x0 = rings[0][0][0]                              # holes on the shell's side of the antimeridian
+    rings = [rings[0]] + [[(x + 360.0 * round((x0 - h[0][0]) / 360.0), y) for x, y in h] for h in rings[1:]]
     return "(" + ",".join("(" + ",".join(f"{x:.5f} {y:.5f}" for x, y in r) + ")" for r in rings) + ")"
 
 

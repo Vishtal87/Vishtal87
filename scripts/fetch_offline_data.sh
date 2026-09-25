@@ -1,11 +1,11 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # Fetch the offline geographic bundle (works where only package registries are reachable).
 #   * world-atlas   — Natural Earth country polygons (public domain)
 #   * cities.json   — GeoNames admin1/admin2 code names + cities (CC-BY 4.0)
 #   * iso3166-2-db  — localized country/region names with GeoNames/OSM references
 # GeoNames cities500 (with multilingual alternate names) comes from the PyPI package `geonamescache`.
 # For the FULL gazetteer (every village/hamlet) use scripts/fetch_geonames.sh (needs download.geonames.org).
-set -euo pipefail
+set -eu  # POSIX sh: also runs in minimal (alpine/busybox) build images
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DEST="$ROOT/data/vendor"
 mkdir -p "$DEST"

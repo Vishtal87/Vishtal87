@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import re
 from pathlib import Path
 
 import yaml
@@ -32,9 +34,19 @@ def resolve_home(conn, spec: dict | None) -> int | None:
     return row["id"] if row else None
 
 
+_ENV = re.compile(r"\$\{([A-Z0-9_]+)(?::-([^}]*))?\}")
+
+
+def _expand(text: str) -> str:
+    """${VAR:-default} substitution (e.g. DEVSTAND_URL differs between local dev and docker compose)."""
+    return _ENV.sub(lambda m: os.environ.get(m.group(1), m.group(2) or ""), text)
+
+
 def load_sources(file: str | None = None) -> int:
-    path = Path(file) if file else settings.config_dir / settings.sources_file
-    data = yaml.safe_load(path.read_text())
+    path = Path(file or settings.sources_file)
+    if not path.exists() and not path.is_absolute():  # bare names refer to the config dir, like GEONEWS_SOURCES
+        path = settings.config_dir / path
+    data = yaml.safe_load(_expand(path.read_text()))
     n = 0
     with connect() as conn:
         for s in data.get("sources", []):

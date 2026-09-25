@@ -14,6 +14,7 @@ export function SearchBar({ near, onPick }: { near: { lat: number; lon: number }
   const [active, setActive] = useState(0)
   const [open, setOpen] = useState(false)
   const input = useRef<HTMLInputElement>(null)
+  const picked = useRef<string | null>(null)   // text put into the field by a pick: not a new query
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -24,7 +25,7 @@ export function SearchBar({ near, onPick }: { near: { lat: number; lon: number }
   }, [])
 
   useEffect(() => {
-    if (q.trim().length < 2) { setResults(null); return }
+    if (q.trim().length < 2 || q === picked.current) { setResults(null); return }
     const ctl = new AbortController()
     const h = setTimeout(() => {
       api.search(q.trim(), lang, near ?? undefined, ctl.signal)
@@ -39,6 +40,7 @@ export function SearchBar({ near, onPick }: { near: { lat: number; lon: number }
   const pick = (r: SearchResult) => {
     onPick(r)
     setOpen(false)
+    picked.current = r.name
     setQ(r.name)
     input.current?.blur()
   }
@@ -49,7 +51,7 @@ export function SearchBar({ near, onPick }: { near: { lat: number; lon: number }
         <Icon name="search" size={20} />
         <input ref={input} value={q} placeholder={t.searchPlaceholder} aria-label={t.searchPlaceholder}
           role="combobox" aria-expanded={open} aria-controls="search-results" aria-autocomplete="list"
-          onChange={(e) => setQ(e.target.value)} onFocus={() => results && setOpen(true)}
+          onChange={(e) => { picked.current = null; setQ(e.target.value) }} onFocus={() => results && setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 150)}
           onKeyDown={(e) => {
             if (!results?.length) return

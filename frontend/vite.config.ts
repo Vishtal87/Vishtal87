@@ -18,5 +18,6 @@ export default defineConfig({
       '/tiles': { target: API, changeOrigin: true },
     },
   },
+  worker: { format: 'es' },   // MapLibre creates its worker with { type: 'module' }
   build: { chunkSizeWarningLimit: 1500 },
 })

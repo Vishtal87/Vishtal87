@@ -1,0 +1,51 @@
+# REAL source registry — template for environments with Internet access.
+#
+# Status: NONE of these URLs could be fetched from the build sandbox (egress closed), so every entry ships with
+# `enabled: false`. Before enabling a source:
+#   1. open the URL, check it still serves a feed / public page and check robots.txt and the site's terms;
+#   2. keep `access_model` honest: public_feed (RSS/Atom published for syndication), official_api (documented open
+#      API), public_web (public pages, robots.txt-permitted, rate-limited). Never add sources behind login/paywall;
+#   3. set `enabled: true` and run `geonews load-sources sources.example.yaml` (or GEONEWS_SOURCES=... in compose).
+# We store the title, a short excerpt (<= 300 chars) and a link to the original; raw payloads expire after
+# GEONEWS_RAW_RETENTION_DAYS. See docs/SOURCES.md.
+x-real: &real {enabled: false, poll_interval: 300}
+
+sources:
+  # ---- international / national media (RSS published for syndication) ----
+  - {<<: *real, slug: bbc-world, name: "BBC News — World", type: media, connector: rss, access_model: public_feed,
+     url: "https://feeds.bbci.co.uk/news/world/rss.xml", languages: [en], country: GB}
+  - {<<: *real, slug: bbc-russian, name: "BBC News Русская служба", type: media, connector: rss, access_model: public_feed,
+     url: "https://feeds.bbci.co.uk/russian/rss.xml", languages: [ru], country: GB}
+  - {<<: *real, slug: tagesschau, name: "tagesschau.de", type: media, connector: rss, access_model: public_feed,
+     url: "https://www.tagesschau.de/index~rss2.xml", languages: [de], country: DE, home: {q: "Germany", cc: DE, kind: country}}
+  - {<<: *real, slug: lemonde-une, name: "Le Monde — À la une", type: media, connector: rss, access_model: public_feed,
+     url: "https://www.lemonde.fr/rss/une.xml", languages: [fr], country: FR, home: {q: "France", cc: FR, kind: country}}
+  - {<<: *real, slug: tass, name: "ТАСС", type: media, connector: rss, access_model: public_feed,
+     url: "https://tass.ru/rss/v2.xml", languages: [ru], country: RU, timezone: Europe/Moscow, home: {q: "Россия", cc: RU, kind: country}}
+  - {<<: *real, slug: ria, name: "РИА Новости", type: media, connector: rss, access_model: public_feed,
+     url: "https://ria.ru/export/rss2/archive/index.xml", languages: [ru], country: RU, timezone: Europe/Moscow,
+     home: {q: "Россия", cc: RU, kind: country}}
+  - {<<: *real, slug: kommersant, name: "Коммерсантъ", type: media, connector: rss, access_model: public_feed,
+     url: "https://www.kommersant.ru/RSS/news.xml", languages: [ru], country: RU, timezone: Europe/Moscow,
+     home: {q: "Россия", cc: RU, kind: country}}
+
+  # ---- official / intergovernmental feeds with coordinates (georss) ----
+  - {<<: *real, slug: usgs-quakes, name: "USGS — землетрясения M2.5+ за сутки", type: official, connector: rss,
+     access_model: public_feed, url: "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.atom", languages: [en]}
+  - {<<: *real, slug: gdacs, name: "GDACS — глобальные оповещения о бедствиях", type: official, connector: rss,
+     access_model: public_feed, url: "https://www.gdacs.org/xml/rss.xml", languages: [en]}
+
+  # ---- open API aggregator: discovery only (titles + links, never the publishers' full text) ----
+  - {<<: *real, slug: gdelt-ru, name: "GDELT DOC 2.0 — русскоязычные материалы", type: aggregator, connector: gdelt,
+     access_model: official_api, url: "https://api.gdeltproject.org/api/v2/doc/doc", languages: [ru], poll_interval: 900,
+     config: {query: "sourcelang:russian", maxrecords: 75}}
+
+  # ---- templates: fill in a concrete channel/site after checking its terms ----
+  - {<<: *real, slug: tg-example, name: "Telegram: публичный канал (шаблон)", type: telegram, connector: telegram_public,
+     access_model: public_web, url: "https://t.me/s/<channel>", languages: [ru], country: RU,
+     home: {q: "<город или регион канала>", cc: RU, kind: locality}}
+  - {<<: *real, slug: yt-example, name: "YouTube: канал (шаблон)", type: youtube, connector: youtube_rss,
+     access_model: public_feed, url: "https://www.youtube.com/feeds/videos.xml?channel_id=<CHANNEL_ID>", languages: [ru]}
+  - {<<: *real, slug: official-site-example, name: "Официальный сайт без RSS (шаблон)", type: official, connector: html_list,
+     access_model: public_web, url: "https://<official-site>/news/", languages: [ru], country: RU, timezone: Europe/Moscow,
+     home: {q: "<муниципалитет>", cc: RU, kind: locality}, config: {item_xpath: "//a[contains(@href, '/news/')]/@href", max_new: 20}}

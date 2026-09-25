@@ -6,7 +6,7 @@ import { useEffect, useRef } from 'react'
 import * as maplibregl from 'maplibre-gl'
 import type { GeoJSONSource, Map as MLMap, MapLayerMouseEvent, VectorTileSource } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
+import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import type { Feature, FeatureCollection, Point, Polygon } from 'geojson'
 import { api } from '../api/client'
 import type { Category, Filters, Level, LiveEvent } from '../api/types'
@@ -31,7 +31,8 @@ interface Props {
   onStats: (s: MapStats) => void
 }
 
-// MapLibre 6 runs its tile parsing in a module worker; give it a bundler-resolved URL (dev + prod).
+// MapLibre 6 runs its tile parsing in a module worker that imports a shared chunk: `?worker&url` makes Vite bundle
+// the worker with its imports into one self-contained file (plain `?url` would copy the entry file alone -> 404 in prod).
 maplibregl.setWorkerUrl(workerUrl)
 
 const EMPTY: FeatureCollection = { type: 'FeatureCollection', features: [] }
