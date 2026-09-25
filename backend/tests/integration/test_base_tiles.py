@@ -8,6 +8,7 @@ COUNTRIES = [
     ("tile-west", "Tileland West", -100, 30, -90, 40),     # western hemisphere
     ("tile-central", "Tileland Central", 10, 45, 20, 52),  # just east of Greenwich
     ("tile-east", "Tileland East", 135, 33, 142, 40),      # next to the antimeridian (Japan-like)
+    ("tile-polar", "Tileland Polar", -180, -90, 180, -70),  # reaches the pole, like Antarctica
 ]
 
 
@@ -46,3 +47,9 @@ def test_western_edge_tile(countries):
     mvt = _tile(1, 0, 0)  # lon -180..0
     assert b"Tileland West" in mvt
     assert b"Tileland East" not in mvt
+
+
+def test_polygon_reaching_the_pole_renders(countries):
+    # the pole is outside Web Mercator: PROJ 7 raises "tolerance condition error", PROJ 9 returns -2.4e8 m
+    for z, x, y in [(0, 0, 0), (1, 0, 1), (2, 2, 3)]:
+        assert b"Tileland Polar" in _tile(z, x, y)

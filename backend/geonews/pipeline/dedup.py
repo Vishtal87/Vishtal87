@@ -9,8 +9,7 @@ import hashlib
 
 from geonews.domain.text_norm import tokenize
 
-HAMMING_MAX = 6          # candidates are verified with Jaccard afterwards
-JACCARD_DUP = 0.72       # >= : same text (forward, repost, lightly edited copy)
+JACCARD_DUP = 0.72       # >= : same text (forward, repost, lightly edited copy); decides for every band candidate
 
 
 def _h64(s: str) -> int:

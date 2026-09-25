@@ -42,7 +42,7 @@ class Fetcher:
         )
         self.min_interval_s = min_interval_s
         self._last_hit: dict[str, float] = {}
-        self._robots: dict[str, tuple[RobotFileParser | None, float]] = {}
+        self._robots: dict[str, tuple[RobotFileParser, float]] = {}   # base -> (rules, expires_at)
         self._lock = threading.Lock()
 
     def close(self) -> None:
@@ -58,18 +58,20 @@ class Fetcher:
     def allowed(self, url: str) -> bool:
         p = urlsplit(url)
         base = f"{p.scheme}://{p.netloc}"
-        rp, ts = self._robots.get(base, (None, 0.0))
-        if rp is None or time.time() - ts > 3600:
-            rp = RobotFileParser()
+        rp, expires = self._robots.get(base, (None, 0.0))
+        if rp is None or time.time() > expires:
+            rp, ttl = RobotFileParser(), 3600
             try:
                 r = self.client.get(base + "/robots.txt", timeout=10)
-                if r.status_code >= 400:
-                    rp.parse([])  # no robots.txt: everything allowed
+                if r.status_code >= 500:
+                    rp.disallow_all, ttl = True, 600   # RFC 9309: robots.txt unreachable -> assume full disallow
+                elif r.status_code >= 400:
+                    rp.parse([])                       # no robots.txt (4xx): everything allowed
                 else:
                     rp.parse(r.text.splitlines())
             except httpx.HTTPError:
-                rp.parse([])
-            self._robots[base] = (rp, time.time())
+                rp.disallow_all, ttl = True, 600
+            self._robots[base] = (rp, time.time() + ttl)
         return rp.can_fetch(settings.user_agent, url)
 
     def get(self, url: str, etag: str | None = None, last_modified: str | None = None,

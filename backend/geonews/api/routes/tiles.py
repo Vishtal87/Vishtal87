@@ -26,20 +26,25 @@ def _tile(z: int, x: int, y: int, lang: str) -> bytes:
     with connection() as conn:
         row = conn.execute(
             """
-            -- The index filter box is expanded in degrees AFTER the transform: transforming a margin-expanded
-            -- envelope wraps lon 183.6 -> -176.4 at the antimeridian and selects the opposite hemisphere.
-            WITH b AS (SELECT ST_TileEnvelope(%(z)s, %(x)s, %(y)s) AS env,
-                              ST_Expand(ST_Transform(ST_TileEnvelope(%(z)s, %(x)s, %(y)s), 4326), %(margin_deg)s) AS env4326),
+            -- The filter/clip box is expanded in degrees AFTER the transform (a margin-expanded envelope wraps
+            -- lon 183.6 -> -176.4 at the antimeridian) and capped at Web Mercator's latitude limit: geometry at
+            -- the poles (Antarctica) must never reach ST_Transform(…, 3857) (PROJ 7 errors, PROJ 9 returns -2e8).
+            -- Clipping to the tile before transforming also keeps big polygons (Russia) cheap at high zoom.
+            WITH e AS (SELECT ST_Expand(ST_Transform(ST_TileEnvelope(%(z)s, %(x)s, %(y)s), 4326), %(margin_deg)s) AS e),
+            b AS (SELECT ST_TileEnvelope(%(z)s, %(x)s, %(y)s) AS env,
+                         ST_MakeEnvelope(ST_XMin(e), greatest(ST_YMin(e), -85.0511), ST_XMax(e),
+                                         least(ST_YMax(e), 85.0511), 4326) AS box FROM e),
             c AS (
               SELECT g.id, coalesce(g.names->>%(lang)s, g.name) AS name,
-                     ST_AsMVTGeom(ST_SimplifyPreserveTopology(ST_Transform(g.area, 3857), %(tol)s), b.env, 4096, 64, true) AS geom
-              FROM geo_entity g, b WHERE g.kind = 'country' AND g.area && b.env4326),
+                     ST_AsMVTGeom(ST_SimplifyPreserveTopology(ST_Transform(ST_ClipByBox2D(g.area, b.box), 3857), %(tol)s),
+                                  b.env, 4096, 64, true) AS geom
+              FROM geo_entity g, b WHERE g.kind = 'country' AND g.area && b.box),
             p AS (
               SELECT g.id, g.kind, coalesce(g.names->>%(lang)s, g.name) AS name, g.population,
                      (g.feature_code = 'PPLC') AS capital,
                      ST_AsMVTGeom(ST_Transform(g.geom, 3857), b.env, 4096, 64, true) AS geom
               FROM geo_entity g, b
-              WHERE g.geom && b.env4326 AND (
+              WHERE g.geom && b.box AND (
                     (g.kind = 'country' AND %(z)s BETWEEN 2 AND 6)
                  OR (g.kind = 'admin1' AND %(z)s BETWEEN 4 AND 7 AND g.population > 0)
                  OR (g.kind = 'locality' AND (g.population >= %(minpop)s OR (g.feature_code = 'PPLC' AND %(z)s >= 3))))

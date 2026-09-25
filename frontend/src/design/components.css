@@ -41,7 +41,7 @@
 .brand__name { font-size: 17px; }
 
 /* ============================================================== search */
-.search { position: relative; flex: 1 1 520px; max-width: 620px; }
+.search { position: relative; flex: 1 1 520px; min-width: 0; max-width: 620px; }   /* may shrink below the input's intrinsic width */
 .search__field {
   display: flex; align-items: center; gap: 10px; height: 52px; padding: 0 8px 0 18px; border-radius: var(--r-full);
   box-shadow: var(--e2); color: var(--c-on-surface-variant); transition: box-shadow var(--dur-s) var(--ease);
@@ -283,14 +283,12 @@
 
 /* ============================================================== mobile */
 @media (max-width: 760px) {
-  .brand__name, .search__kbd { display: none; }
-  .brand { width: var(--tap); height: var(--tap); padding: 0; justify-content: center; }
-  .brand__mark { width: 30px; height: 30px; }
+  /* the logo is decorative; the language switch must stay reachable on phones */
+  .brand, .search__kbd { display: none; }
   .topbar { gap: 8px; top: 10px; }
   .search__field { height: 48px; }
   .live span:not(.live-dot):not(.live__badge) { display: none; }
   .live { padding: 0 12px; }
-  .lang-btn { display: none; }
   .toolbar { top: 66px; }
   .has-panel .topbar, .has-panel .toolbar { right: var(--gutter); }
   .banners { top: 112px; }

@@ -287,6 +287,9 @@ export function GlobeMap(p: Props) {
       const areaEvents = fc.features.filter((f) => f.properties?.kind === 'area_event')
       const withRadius = [...areaEvents, ...events].filter((f) => (f.properties as Record<string, unknown> | null)?.radius_m)
       ;(map.getSource('activity') as GeoJSONSource).setData({ type: 'FeatureCollection', features: activity })
+      // a place with an activity bubble is already named by it: hide the base-map label underneath (no doubles)
+      const named = activity.map((f) => f.properties?.id).filter((id): id is number => typeof id === 'number')
+      map.setFilter('place-labels', named.length ? ['!', ['in', ['get', 'id'], ['literal', named]]] : null)
       ;(map.getSource('events') as GeoJSONSource).setData({ type: 'FeatureCollection', features: events })
       ;(map.getSource('area-points') as GeoJSONSource).setData({ type: 'FeatureCollection', features: areaEvents })
       ;(map.getSource('areas') as GeoJSONSource).setData({

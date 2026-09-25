@@ -16,8 +16,10 @@ const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=sw
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark', locale: 'ru-RU' })
 const page = await ctx.newPage()
 const errors = []
-page.on('pageerror', (e) => errors.push(e.message))
-page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()) })
+page.on('pageerror', (e) => errors.push(`pageerror: ${String(e.stack ?? e.message).split('\n').slice(0, 3).join(' | ')}`))
+page.on('console', (m) => {
+  if (m.type() === 'error') errors.push(`console: ${m.text()} @ ${m.location().url}:${m.location().lineNumber}`)
+})
 
 async function step(n, name, fn) {
   const t0 = Date.now()
