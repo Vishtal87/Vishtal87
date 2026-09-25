@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import feedparser
 
-from geonews.ingestion.connectors.base import FetchResult
+from geonews.ingestion.connectors.base import FetchResult, respects_robots
 from geonews.ingestion.entry import RawEntry
 from geonews.ingestion.fetcher import FetchError, Fetcher
 
@@ -26,8 +26,24 @@ def _georss(e) -> tuple[float | None, float | None]:
     return None, None
 
 
+def repair_xml(text: str) -> str | None:
+    """Real-world feeds break XML (unescaped <br> in descriptions, stray tags): let libxml2 recover what it can."""
+    from lxml import etree
+
+    try:
+        root = etree.fromstring(text.encode("utf-8"), etree.XMLParser(recover=True, huge_tree=True,
+                                                                     resolve_entities=False, no_network=True))
+    except (etree.XMLSyntaxError, ValueError):
+        return None
+    return None if root is None else etree.tostring(root, encoding="unicode")
+
+
 def parse_feed(text: str, media: str = "text") -> tuple[list[RawEntry], str | None]:
     d = feedparser.parse(text)
+    if d.bozo and not d.entries:
+        fixed = repair_xml(text)
+        if fixed:
+            d = feedparser.parse(fixed)
     if d.bozo and not d.entries:
         raise FetchError(f"malformed feed: {getattr(d, 'bozo_exception', 'parse error')}")
     feed_lang = (d.feed.get("language") or "").split("-")[0].lower() or None
@@ -61,7 +77,8 @@ class RssConnector:
     media = "text"
 
     def fetch(self, source: dict, fetcher: Fetcher) -> FetchResult:
-        r = fetcher.get(source["url"], source.get("http_etag"), source.get("http_last_modified"))
+        r = fetcher.get(source["url"], source.get("http_etag"), source.get("http_last_modified"),
+                        respect_robots=respects_robots(source))
         if r.not_modified:
             return FetchResult(not_modified=True, etag=r.etag, last_modified=r.last_modified)
         entries, _ = parse_feed(r.text, self.media)

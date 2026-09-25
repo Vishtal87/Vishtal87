@@ -76,6 +76,13 @@ class Fetcher:
             self._robots[base] = (rp, time.time() + ttl, err)
         return rp.can_fetch(settings.user_agent, url)
 
+    def sitemaps(self, url: str) -> list[str]:
+        """Sitemap URLs the site lists in its robots.txt (loaded and cached by `allowed`)."""
+        self.allowed(url)
+        p = urlsplit(url)
+        rp = self._robots.get(f"{p.scheme}://{p.netloc}", (None, 0.0, None))[0]
+        return list(rp.site_maps() or []) if rp else []
+
     def _robots_refusal(self, url: str) -> str:
         p = urlsplit(url)
         err = self._robots.get(f"{p.scheme}://{p.netloc}", (None, 0.0, None))[2]

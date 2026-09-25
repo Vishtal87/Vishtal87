@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import lxml.html
 
-from geonews.ingestion.connectors.base import FetchResult
+from geonews.ingestion.connectors.base import FetchResult, respects_robots
 from geonews.ingestion.entry import RawEntry
 from geonews.ingestion.fetcher import Fetcher
 
@@ -43,5 +43,5 @@ class TelegramPublicConnector:
     access_model = "public_web"
 
     def fetch(self, source: dict, fetcher: Fetcher) -> FetchResult:
-        r = fetcher.get(source["url"])
+        r = fetcher.get(source["url"], respect_robots=respects_robots(source))
         return FetchResult(entries=parse_preview(r.text, source["url"]))

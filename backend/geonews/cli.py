@@ -24,6 +24,9 @@ def main(argv: list[str] | None = None) -> None:
     cs = sub.add_parser("check-sources", help="verify candidate sources (robots.txt, feed discovery, parse, freshness)")
     cs.add_argument("file", help="registry YAML with candidates (url or homepage per entry)")
     cs.add_argument("--out", default=None, help="write verified sources (enabled, with the working feed URL) here")
+    cs.add_argument("--keep-previous", action="store_true",
+                    help="a candidate that fails now but is verified in the existing --out file stays there "
+                         "(a site that is down for an hour is not dropped; ingestion backs off by itself)")
     sub.add_parser("load-categories", help="load/refresh categories from config/categories.yaml")
     sub.add_parser("reset-news", help="DANGER: delete all ingested news/events/jobs (keeps gazetteer & sources)")
     sub.add_parser("rebuild-rollup", help="rebuild the map activity rollup from events (after bulk operations)")
@@ -80,14 +83,19 @@ def main(argv: list[str] | None = None) -> None:
         from geonews.ingestion.registry import read_registry
         from geonews.ingestion.verify import check_candidate, verified_entry
 
+        previous = {}
+        if args.keep_previous and args.out and Path(args.out).exists():
+            previous = {s["slug"]: s for s in read_registry(args.out)}
         fetcher, ok = Fetcher(), []
         for spec in read_registry(args.file):
             chk = check_candidate(spec, fetcher)
-            status = "OK   " if chk.ok else "FAIL "
+            status = "OK   " if chk.ok else ("KEEP " if spec["slug"] in previous else "FAIL ")
             detail = f"{chk.entries} items, newest {chk.age_h} h ago -> {chk.url}" if chk.url else ""
             print(f"{status}{spec['slug']:<28} {detail} {chk.error or ''}".rstrip(), flush=True)
             if chk.ok:
                 ok.append(verified_entry(spec, chk))
+            elif spec["slug"] in previous:
+                ok.append(previous[spec["slug"]])
         print(f"verified {len(ok)} sources")
         if not ok:
             raise SystemExit("nothing verified, no registry written (network access? robots.txt? feed URLs?)")

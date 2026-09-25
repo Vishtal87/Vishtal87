@@ -15,7 +15,9 @@
 # DOMAIN from .env. Caddy obtains and renews the HTTPS certificate itself (ports 80 and 443 must be open).
 # No domain of your own: DOMAIN=<ip-with-dashes>.sslip.io resolves to the server and gets a certificate too.
 # DOMAIN=localhost gets a local self-signed certificate (for testing the stack).
-{$DOMAIN} {
+# SITE_SCHEME=http:// (set by the installer when 80/443 belong to another service): no certificate is possible
+# without those ports, so the domain is served over plain HTTP too instead of failing certificate attempts.
+{$SITE_SCHEME}{$DOMAIN} {
 	import site
 }
 

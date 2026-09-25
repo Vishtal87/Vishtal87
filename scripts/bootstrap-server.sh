@@ -4,7 +4,8 @@
 #   curl -fsSL https://raw.githubusercontent.com/Vishtal87/Vishtal87/claude/geo-news-interactive-map-29asu8/scripts/bootstrap-server.sh | bash
 #
 # Optional variables (put them before `bash`): DOMAIN=news.example.ru (default: <ip>.sslip.io, no domain needed),
-# BRANCH, DIR (default /opt/pulse). Safe to run again: existing .env and data are kept, finished steps are skipped.
+# BRANCH, DIR (default /opt/pulse), AUTOUPDATE=0 (do not install the 30-minute auto-update timer).
+# Safe to run again: existing .env and data are kept, finished steps are skipped.
 # PULSE_DRY_RUN=1 shows the settings it would use and changes nothing.
 set -euo pipefail
 
@@ -24,6 +25,8 @@ public_ip() {
 }
 
 mem_mb() { awk '/MemTotal/ {print int($2 / 1024)}' /proc/meminfo; }
+port_busy() { ss -Hltn "sport = :$1" | grep -q .; }
+free_port() { for p in "$@"; do port_busy "$p" || { echo "$p"; return; }; done; echo "$1"; }
 
 write_env() {   # prints a complete .env for this machine
   local ip=$1 domain=$2 mem=$3 shared cache workers
@@ -59,7 +62,7 @@ fi
 if [ "${1:-}" != "--install" ]; then
   say "Getting the code into $DIR"
   export DEBIAN_FRONTEND=noninteractive
-  apt-get update -qq && apt-get install -y -qq git curl ca-certificates openssl >/dev/null
+  apt-get update -qq && apt-get install -y -qq git curl ca-certificates openssl iproute2 >/dev/null
   if [ -d "$DIR/.git" ]; then git -C "$DIR" fetch -q origin "$BRANCH" && git -C "$DIR" checkout -q "$BRANCH" \
     && git -C "$DIR" pull -q --ff-only origin "$BRANCH"
   else git clone -q -b "$BRANCH" "$REPO" "$DIR"; fi
@@ -109,19 +112,51 @@ if [ ! -f .geonames-RU.done ]; then
 fi
 
 say "Checking news sources (Krasnodar Krai, federal media)"
-scripts/prod.sh verify-sources
+scripts/prod.sh verify-sources --keep-previous
 
-# ports 80/443 held by something else (another site, a VPN panel): leave it alone and use 8080/8443
-if ! grep -q '^HTTP_PORT=' .env && ! docker ps --format '{{.Names}}' | grep -q -- '-caddy-1$'; then
-  if ss -Hltn 'sport = :80' | grep -q . || ss -Hltn 'sport = :443' | grep -q .; then
-    say "Ports 80/443 are already used by another service on this server: the site goes to 8080/8443"
-    printf 'HTTP_PORT=8080\nHTTPS_PORT=8443\n' >> .env
-  fi
+# ports 80/443 held by something else (another site, a VPN panel): leave it alone and take free ports instead.
+# "Something else" = anything but this installation's own Caddy (other projects may have a *-caddy-1 too).
+our_caddy=$(docker compose -f docker-compose.yml -f docker-compose.prod.yml ps -q --status running caddy 2>/dev/null || true)
+if ! grep -q '^HTTP_PORT=' .env && [ -z "$our_caddy" ] && { port_busy 80 || port_busy 443; }; then
+  hp=$(free_port 8080 8081 8088 8888 8000); sp=$(free_port 8443 8444 9443)
+  say "Ports 80/443 are already used by another service on this server: the site goes to port $hp"
+  printf 'HTTP_PORT=%s\nHTTPS_PORT=%s\n' "$hp" "$sp" >> .env
+fi
+# no certificate can be obtained without ports 80/443: serve the domain over plain HTTP instead of failing attempts
+if grep -q '^HTTP_PORT=' .env && ! grep -q '^HTTP_PORT=80$' .env && ! grep -q '^SITE_SCHEME=' .env; then
+  echo 'SITE_SCHEME=http://' >> .env
 fi
 set -a; . ./.env; set +a
 
 say "Starting the site"
 scripts/prod.sh up
+scripts/prod.sh health 18 || echo "the site is not answering yet: scripts/prod.sh logs caddy api"
+
+if [ "${AUTOUPDATE:-1}" != 0 ]; then
+  say "Installing auto-update (checks for new versions every 30 min, rolls back if the site breaks)"
+  cat > /etc/systemd/system/pulse-autoupdate.service <<UNIT
+[Unit]
+Description=Pulse: apply new commits of $BRANCH (rolls back when the site is unhealthy)
+After=docker.service network-online.target
+Wants=network-online.target
+[Service]
+Type=oneshot
+WorkingDirectory=$DIR
+ExecStart=$DIR/scripts/prod.sh autoupdate
+TimeoutStartSec=3600
+UNIT
+  cat > /etc/systemd/system/pulse-autoupdate.timer <<UNIT
+[Unit]
+Description=Pulse auto-update every 30 minutes
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=30min
+RandomizedDelaySec=120
+[Install]
+WantedBy=timers.target
+UNIT
+  systemctl daemon-reload && systemctl enable --now pulse-autoupdate.timer
+fi
 
 say "DONE"
 if [ "${HTTP_PORT:-80}" = 80 ]; then
@@ -129,6 +164,8 @@ if [ "${HTTP_PORT:-80}" = 80 ]; then
   echo "    Also (no TLS):  http://$PUBLIC_IP"
 else
   echo "    Site:           http://$PUBLIC_IP:$HTTP_PORT   (ports 80/443 are used by another service, so no HTTPS)"
+  echo "    Also:           http://$DOMAIN:$HTTP_PORT"
 fi
 echo "    First news appear within ~5 minutes. Manage with: cd $DIR && scripts/prod.sh status|logs|update|backup"
+[ "${AUTOUPDATE:-1}" = 0 ] || echo "    Auto-update log: journalctl -u pulse-autoupdate   Off: systemctl disable --now pulse-autoupdate.timer"
 echo "    Security: change the root password (passwd) or switch to SSH keys."

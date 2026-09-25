@@ -1,0 +1,141 @@
+"""Page-based collection: broken feed repair, news sitemaps, generic listing pages, per-source robots override."""
+from datetime import UTC, datetime, timedelta
+
+import httpx
+
+from geonews.ingestion.connectors import CONNECTORS
+from geonews.ingestion.connectors.article import article_links
+from geonews.ingestion.connectors.rss import parse_feed
+from geonews.ingestion.connectors.sitemap_news import parse_sitemap
+from geonews.ingestion.fetcher import Fetcher
+from geonews.ingestion.verify import check_candidate, verified_entry
+
+PARAGRAPH = ("В станице Динской Краснодарского края в среду вечером загорелся склад на улице Красной. "
+             "На место прибыли пять пожарных расчётов, огонь локализовали за два часа, пострадавших нет. ")
+
+
+def _article(title: str, when: datetime) -> str:
+    return (f'<html><head><title>{title} | Новости</title><meta property="og:title" content="{title}">'
+            f'<meta property="article:published_time" content="{when.isoformat()}"></head><body>'
+            f'<nav><a href="/">Главная</a></nav><article><h1>{title}</h1>'
+            + "".join(f"<p>{PARAGRAPH}</p>" for _ in range(4)) + "</article></body></html>")
+
+
+def _fetcher(pages: dict[str, tuple[int, str]]) -> tuple[Fetcher, list[str]]:
+    hits: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        hits.append(request.url.path)
+        status, body = pages.get(request.url.path, (404, ""))
+        return httpx.Response(status, text=body)
+
+    f = Fetcher(min_interval_s=0)
+    f.client = httpx.Client(transport=httpx.MockTransport(handler))
+    return f, hits
+
+
+NOW = datetime.now(UTC)
+LISTING = ('<html><body><a href="/news">Новости</a><a href="/tags/pozhar">Все новости с тегом пожар</a>'
+           '<a href="/news/2026/09/sklad-v-dinskoy">Склад загорелся в станице Динской вечером в среду</a>'
+           '<a href="https://other.test/news/1/x">Материал другого сайта со ссылкой на новость</a>'
+           '<a href="/news/12345">Короткий</a>'
+           '<a href="/news/2026/09/sklad-v-dinskoy#comments">Склад загорелся в станице Динской (комментарии)</a>'
+           "</body></html>")
+
+
+def test_broken_feed_is_repaired_instead_of_rejected():
+    broken = ('<?xml version="1.0"?><rss version="2.0"><channel><title>t</title><item><title>Пожар & дым</title>'
+              "<link>https://news.test/1</link><guid>1</guid><description>текст<br>ещё</description></item>"
+              "</channel></rss>")
+    entries, _ = parse_feed(broken)
+    assert [e.external_id for e in entries] == ["1"]
+
+
+def test_article_links_keep_same_site_articles_only():
+    assert article_links(LISTING, "https://news.test/") == ["https://news.test/news/2026/09/sklad-v-dinskoy"]
+
+
+def test_html_list_collects_articles_and_skips_known():
+    f, _ = _fetcher({"/": (200, LISTING),
+                     "/news/2026/09/sklad-v-dinskoy": (200, _article("Склад загорелся в Динской", NOW))})
+    res = CONNECTORS["html_list"].fetch({"url": "https://news.test/"}, f)
+    [e] = res.entries
+    assert e.title == "Склад загорелся в Динской" and "пожарных расчётов" in e.body_text and e.published
+    again = CONNECTORS["html_list"].fetch({"url": "https://news.test/", "known_ids": [e.external_id]}, f)
+    assert again.entries == []
+
+
+SITEMAP_INDEX = ('<?xml version="1.0"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+                 "<sitemap><loc>https://news.test/sitemap-pages.xml</loc></sitemap>"
+                 "<sitemap><loc>https://news.test/sitemap-news.xml</loc></sitemap></sitemapindex>")
+
+
+def _news_sitemap(*items: tuple[str, str, datetime]) -> str:
+    body = "".join(f"<url><loc>https://news.test{path}</loc><news:news><news:title>{title}</news:title>"
+                   f"<news:publication_date>{when.isoformat()}</news:publication_date></news:news></url>"
+                   for path, title, when in items)
+    return ('<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" '
+            f'xmlns:news="http://www.google.com/schemas/sitemap-news/0.9">{body}</urlset>')
+
+
+def test_sitemap_parsing_reads_index_and_news_tags():
+    assert parse_sitemap(SITEMAP_INDEX) == ([], ["https://news.test/sitemap-pages.xml",
+                                                 "https://news.test/sitemap-news.xml"])
+    items, children = parse_sitemap(_news_sitemap(("/a", "Заголовок", NOW)))
+    assert children == [] and items[0].url == "https://news.test/a" and items[0].title == "Заголовок"
+
+
+def test_sitemap_news_takes_fresh_articles_newest_first():
+    sm = _news_sitemap(("/old", "Старая новость", NOW - timedelta(days=10)),
+                       ("/a", "Первая новость", NOW - timedelta(hours=5)),
+                       ("/b", "Вторая новость", NOW - timedelta(hours=1)))
+    f, hits = _fetcher({"/sitemap.xml": (200, SITEMAP_INDEX), "/sitemap-news.xml": (200, sm),
+                        "/a": (200, _article("a", NOW)), "/b": (200, _article("b", NOW)),
+                        "/old": (200, _article("old", NOW))})
+    res = CONNECTORS["sitemap_news"].fetch({"url": "https://news.test/sitemap.xml"}, f)
+    assert [e.title for e in res.entries] == ["Вторая новость", "Первая новость"]   # title from the sitemap
+    assert "/old" not in hits and "/sitemap-pages.xml" not in hits
+
+
+def test_robots_override_is_per_source():
+    pages = {"/robots.txt": (200, "User-agent: *\nDisallow: /\n"), "/": (200, LISTING),
+             "/news/2026/09/sklad-v-dinskoy": (200, _article("Склад", NOW))}
+    f, _ = _fetcher(pages)
+    spec = {"slug": "closed", "homepage": "https://news.test/"}
+    assert not check_candidate(spec, f).ok
+    spec["config"] = {"respect_robots": False}
+    chk = check_candidate(spec, f)
+    assert chk.ok and chk.connector == "html_list"
+    entry = verified_entry(spec, chk)
+    assert entry["access_model"] == "public_web" and "owner's decision" in entry["legal_note"]
+
+
+def test_verify_prefers_news_sitemap_over_listing_when_no_feed():
+    robots = "User-agent: *\nAllow: /\nSitemap: https://news.test/sitemap-news.xml\n"
+    sm = _news_sitemap(("/a", "Новость из карты сайта", NOW - timedelta(hours=2)))
+    f, _ = _fetcher({"/robots.txt": (200, robots), "/": (200, LISTING), "/sitemap-news.xml": (200, sm),
+                     "/a": (200, _article("a", NOW)),
+                     "/news/2026/09/sklad-v-dinskoy": (200, _article("Склад", NOW))})
+    chk = check_candidate({"slug": "no-feed", "homepage": "https://news.test/"}, f)
+    assert chk.ok and chk.connector == "sitemap_news" and chk.url == "https://news.test/sitemap-news.xml"
+
+
+def test_check_sources_keeps_previously_verified_on_temporary_failure(tmp_path, monkeypatch):
+    import yaml
+
+    from geonews import cli
+    from geonews.ingestion import verify
+    from geonews.ingestion.verify import Check
+
+    cand = tmp_path / "cand.yaml"
+    cand.write_text(yaml.safe_dump({"sources": [{"slug": "up", "homepage": "https://a.test/"},
+                                                {"slug": "down", "homepage": "https://b.test/"},
+                                                {"slug": "new-bad", "homepage": "https://c.test/"}]}))
+    out = tmp_path / "out.yaml"
+    out.write_text(yaml.safe_dump({"sources": [{"slug": "down", "url": "https://b.test/rss", "connector": "rss"}]}))
+    monkeypatch.setattr(verify, "check_candidate", lambda spec, f: Check(
+        slug=spec["slug"], ok=spec["slug"] == "up", url="https://a.test/rss" if spec["slug"] == "up" else None,
+        entries=1, newest=NOW, error=None if spec["slug"] == "up" else "HTTP 503"))
+    cli.main(["check-sources", str(cand), "--out", str(out), "--keep-previous"])
+    kept = {s["slug"]: s for s in yaml.safe_load(out.read_text())["sources"]}
+    assert set(kept) == {"up", "down"} and kept["down"]["url"] == "https://b.test/rss"

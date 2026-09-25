@@ -55,6 +55,7 @@ services:
     environment:
       DOMAIN: ${DOMAIN:?set DOMAIN in .env}
       PUBLIC_IP: ${PUBLIC_IP:-127.0.0.1}
+      SITE_SCHEME: ${SITE_SCHEME:-}
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

@@ -10,6 +10,7 @@ dependencies = [
   "httpx>=0.27",
   "feedparser>=6.0",
   "trafilatura>=2.0",
+  "lxml>=5.0",                 # used directly: broken-feed repair, sitemaps, article pages (trafilatura needs it anyway)
   "pymorphy3>=2.0",
   "pymorphy3-dicts-ru",
   "pymorphy3-dicts-uk",

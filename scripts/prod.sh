@@ -7,6 +7,9 @@
 #   status           containers + health of the public site
 #   logs [service]   follow logs
 #   update           git pull + rebuild + restart
+#   autoupdate       unattended update (run by a systemd timer, see bootstrap-server.sh): new commits -> rebuild;
+#                    back to the previous commit when the site does not come back healthy
+#   health [TRIES]   exit 0 when the site answers through Caddy on this machine (TRIES x 10 s)
 #   backup           make a database dump now (also done automatically every BACKUP_EVERY_HOURS)
 #   restore FILE     restore a dump from ./backups (stops api/worker meanwhile)
 #   down             stop everything (data stays in volumes)
@@ -34,7 +37,7 @@ case "$cmd" in
     # runs as the invoking user so the result file in backend/config belongs to them
     # backend/config is mounted read-only into the services; the result goes through a separate writable mount
     "${DC[@]}" run --rm --no-deps --user "$(id -u):$(id -g)" -v "$PWD/backend/config:/out" setup \
-      python -m geonews.cli check-sources sources.ru.candidates.yaml --out /out/sources.ru.yaml
+      python -m geonews.cli check-sources sources.ru.candidates.yaml --out /out/sources.ru.yaml "$@"
     echo "review backend/config/sources.ru.yaml, then: scripts/prod.sh up" ;;
   up)
     src="backend/config/${GEONEWS_SOURCES:-sources.ru.yaml}"
@@ -56,6 +59,36 @@ case "$cmd" in
   update)
     git pull --ff-only
     "$0" up ;;
+  health)
+    for _ in $(seq 1 "${1:-1}"); do
+      curl -fsS --max-time 10 -H "Host: ${PUBLIC_IP:-127.0.0.1}" "http://127.0.0.1:${HTTP_PORT:-80}/api/health" \
+        >/dev/null && exit 0
+      sleep 10
+    done
+    exit 1 ;;
+  autoupdate)
+    exec 9>.autoupdate.lock
+    flock -n 9 || exit 0                                    # a previous run is still building
+    branch=$(git rev-parse --abbrev-ref HEAD)
+    git fetch -q origin "$branch"
+    old=$(git rev-parse HEAD); new=$(git rev-parse FETCH_HEAD)
+    [ "$old" != "$new" ] || exit 0
+    [ "$new" != "$(cat .autoupdate.failed 2>/dev/null)" ] || exit 0     # already tried and rolled back: wait for a fix
+    echo "update ${old:0:7} -> ${new:0:7}"
+    git merge -q --ff-only FETCH_HEAD
+    # new candidates or collection code: re-check the sources, keeping the ones verified before
+    if ! git diff --quiet "$old" "$new" -- backend/config/sources.ru.candidates.yaml backend/geonews/ingestion; then
+      "$0" verify-sources --keep-previous || echo "source check failed: the current source list stays"
+    fi
+    if "$0" up && "$0" health 18; then
+      echo "updated to ${new:0:7}"
+    else
+      echo "the site is not healthy after the update: back to ${old:0:7}"
+      echo "$new" > .autoupdate.failed
+      git reset -q --hard "$old"
+      "$0" up && "$0" health 18
+      exit 1
+    fi ;;
   backup)
     "${DC[@]}" exec backup sh /backup.sh once ;;
   restore)
@@ -69,5 +102,5 @@ case "$cmd" in
   down)
     "${DC[@]}" down ;;
   *)
-    sed -n '2,13p' "$0" ;;
+    sed -n '2,16p' "$0" ;;
 esac

@@ -22,3 +22,6 @@ frontend/public/glyphs/
 .env
 backups/
 .geonames-*.done
+.autoupdate.*
+# written on the server by `scripts/prod.sh verify-sources`
+backend/config/sources.ru.yaml

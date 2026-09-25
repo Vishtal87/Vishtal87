@@ -19,6 +19,9 @@ jobs:
           echo "::add-mask::$BASE"
           host=$(echo "$BASE" | sed -E 's#^[a-z]+://##; s#[:/].*$##'); echo "::add-mask::$host"
           code() { curl -s -o /dev/null -m 20 -w "%{http_code}" "$1"; }
+          for p in 80 443 8080 8081 8443; do
+            timeout 5 bash -c "exec 3<>/dev/tcp/$host/$p" 2>/dev/null && echo "port $p     open" || echo "port $p     closed"
+          done
           echo "page       $(code "$BASE/")"
           echo "--- response headers of / (who answers there):"
           curl -sI -m 15 "$BASE/" | grep -iE "^(HTTP|server|x-powered-by|location|content-type)" || true

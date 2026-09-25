@@ -36,7 +36,7 @@ def poll_source(conn: psycopg.Connection, fetcher: Fetcher, src: dict) -> dict:
     connector = CONNECTORS.get(src["connector"])
     if connector is None:
         raise FetchError(f"unknown connector {src['connector']}")
-    if src["connector"] == "html_list":
+    if src["connector"] in ("html_list", "sitemap_news"):   # page-based: skip articles already collected
         src = dict(src, known_ids=[r["external_id"] for r in conn.execute(
             "SELECT external_id FROM raw_item WHERE source_id = %s ORDER BY id DESC LIMIT 500", (src["id"],))])
     res = connector.fetch(src, fetcher)

@@ -21,3 +21,8 @@ class Connector(Protocol):
     access_model: str  # public_feed | official_api | public_web
 
     def fetch(self, source: dict, fetcher: Fetcher) -> FetchResult: ...
+
+
+def respects_robots(source: dict) -> bool:
+    """robots.txt is obeyed unless the owner switched it off for this one source: config {respect_robots: false}."""
+    return (source.get("config") or {}).get("respect_robots", True) is not False
