@@ -1,20 +1,21 @@
 # LIVE GEO NEWS — full stack.  `docker compose --profile demo up --build`  -> http://localhost:8080
-# Without the demo profile no synthetic sources run: set GEONEWS_SOURCES=sources.example.yaml (real sources).
+# Without the demo profile no synthetic sources run: set GEONEWS_SOURCES to a real registry.
+# Production (HTTPS on your domain, backups): docker-compose.prod.yml via scripts/prod.sh, see docs/DEPLOY.md.
 x-backend: &backend
   build: { context: ., dockerfile: backend/Dockerfile }
   image: geonews-backend
   environment:
-    GEONEWS_DSN: postgresql://geonews:geonews@db:5432/geonews
+    GEONEWS_DSN: postgresql://geonews:${POSTGRES_PASSWORD:-geonews}@db:5432/geonews
     GEONEWS_SOURCES: ${GEONEWS_SOURCES:-sources.demo.yaml}
     DEVSTAND_URL: http://devstand:8090
-    GEONEWS_CORS: http://localhost:8080
+    GEONEWS_CORS: ${GEONEWS_CORS:-http://localhost:8080}
   depends_on:
     db: { condition: service_healthy }
 
 services:
   db:
     image: postgis/postgis:16-3.4
-    environment: { POSTGRES_USER: geonews, POSTGRES_PASSWORD: geonews, POSTGRES_DB: geonews }
+    environment: { POSTGRES_USER: geonews, POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-geonews}", POSTGRES_DB: geonews }
     command: ["postgres", "-c", "shared_buffers=1GB", "-c", "work_mem=32MB", "-c", "effective_cache_size=4GB"]
     volumes: [pgdata:/var/lib/postgresql/data]
     # -h 127.0.0.1: the image's first-boot init server listens on the unix socket only; wait for the real TCP server

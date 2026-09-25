@@ -42,7 +42,7 @@ class Fetcher:
         )
         self.min_interval_s = min_interval_s
         self._last_hit: dict[str, float] = {}
-        self._robots: dict[str, tuple[RobotFileParser, float]] = {}   # base -> (rules, expires_at)
+        self._robots: dict[str, tuple[RobotFileParser, float, str | None]] = {}  # base -> (rules, expires_at, error)
         self._lock = threading.Lock()
 
     def close(self) -> None:
@@ -58,26 +58,34 @@ class Fetcher:
     def allowed(self, url: str) -> bool:
         p = urlsplit(url)
         base = f"{p.scheme}://{p.netloc}"
-        rp, expires = self._robots.get(base, (None, 0.0))
+        rp, expires, _ = self._robots.get(base, (None, 0.0, None))
         if rp is None or time.time() > expires:
-            rp, ttl = RobotFileParser(), 3600
+            rp, ttl, err = RobotFileParser(), 3600, None
             try:
                 r = self.client.get(base + "/robots.txt", timeout=10)
                 if r.status_code >= 500:
-                    rp.disallow_all, ttl = True, 60    # RFC 9309: robots.txt unreachable -> assume full disallow
+                    err = f"HTTP {r.status_code}"
                 elif r.status_code >= 400:
                     rp.parse([])                       # no robots.txt (4xx): everything allowed
                 else:
                     rp.parse(r.text.splitlines())
-            except httpx.HTTPError:
+            except httpx.HTTPError as e:
+                err = type(e).__name__
+            if err:                                    # RFC 9309: robots.txt unreachable -> assume full disallow
                 rp.disallow_all, ttl = True, 60
-            self._robots[base] = (rp, time.time() + ttl)
+            self._robots[base] = (rp, time.time() + ttl, err)
         return rp.can_fetch(settings.user_agent, url)
+
+    def _robots_refusal(self, url: str) -> str:
+        p = urlsplit(url)
+        err = self._robots.get(f"{p.scheme}://{p.netloc}", (None, 0.0, None))[2]
+        return (f"robots.txt unreachable ({err}), treated as disallow: {url}" if err
+                else f"disallowed by robots.txt: {url}")
 
     def get(self, url: str, etag: str | None = None, last_modified: str | None = None,
             respect_robots: bool = True) -> Response:
         if respect_robots and not self.allowed(url):
-            raise FetchError(f"disallowed by robots.txt: {url}")
+            raise FetchError(self._robots_refusal(url))
         host = urlsplit(url).netloc
         self._throttle(host)
         headers = {}

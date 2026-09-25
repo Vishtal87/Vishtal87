@@ -42,14 +42,21 @@ def _expand(text: str) -> str:
     return _ENV.sub(lambda m: os.environ.get(m.group(1), m.group(2) or ""), text)
 
 
-def load_sources(file: str | None = None) -> int:
+def read_registry(file: str | None = None) -> list[dict]:
+    """Source entries of a registry YAML (`sources:` list) with ${VAR:-default} expanded."""
     path = Path(file or settings.sources_file)
     if not path.exists() and not path.is_absolute():  # bare names refer to the config dir, like GEONEWS_SOURCES
         path = settings.config_dir / path
-    data = yaml.safe_load(_expand(path.read_text()))
+    return (yaml.safe_load(_expand(path.read_text())) or {}).get("sources", [])
+
+
+def load_sources(file: str | None = None) -> int:
     n = 0
     with connect() as conn:
-        for s in data.get("sources", []):
+        for s in read_registry(file):
+            if not s.get("url"):  # a candidate with only a homepage: run `geonews check-sources` first
+                log.warning("source %s has no url, skipped (verify candidates with check-sources)", s.get("slug"))
+                continue
             home = resolve_home(conn, s.get("home"))
             conn.execute(
                 """INSERT INTO source (slug, name, source_type, connector, url, config, languages, country_code,

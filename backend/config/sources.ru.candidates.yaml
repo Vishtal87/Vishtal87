@@ -1,0 +1,53 @@
+# CANDIDATE sources: Krasnodar Krai first, then federal Russian media.
+#
+# Nothing here has been fetched yet (the build environment had no Internet access). Do not load this file directly:
+#   geonews check-sources sources.ru.candidates.yaml --out config/sources.ru.yaml
+# checks robots.txt, finds the RSS/Atom feed of every `homepage` (autodiscovery), parses it, rejects stale feeds
+# and writes the verified, enabled entries to sources.ru.yaml. Review that file, then
+#   geonews load-sources sources.ru.yaml        (or GEONEWS_SOURCES=sources.ru.yaml)
+# Add public Telegram channels as {connector: telegram_public, url: "https://t.me/s/<channel>", type: telegram}.
+x-kuban: &kuban {access_model: public_feed, languages: [ru], country: RU, timezone: Europe/Moscow, poll_interval: 300,
+                 home: {q: "Краснодарский край", cc: RU, kind: admin1}}
+x-ru: &ru {access_model: public_feed, languages: [ru], country: RU, timezone: Europe/Moscow, poll_interval: 300,
+           home: {q: "Россия", cc: RU, kind: country}}
+
+sources:
+  # ---- Krasnodar Krai: regional media (feed URL found by autodiscovery) ----
+  - {<<: *kuban, slug: kubnews, name: "Кубанские новости", type: regional_media, connector: rss, homepage: "https://kubnews.ru/"}
+  - {<<: *kuban, slug: kuban24, name: "Кубань 24", type: tv, connector: rss, homepage: "https://kuban24.tv/"}
+  - {<<: *kuban, slug: yuga, name: "Юга.ру", type: regional_media, connector: rss, homepage: "https://www.yuga.ru/"}
+  - {<<: *kuban, slug: kuban-rbc, name: "РБК Краснодар", type: regional_media, connector: rss, homepage: "https://kuban.rbc.ru/"}
+  - {<<: *kuban, slug: kuban-kp, name: "Комсомольская правда — Кубань", type: regional_media, connector: rss,
+     homepage: "https://www.kuban.kp.ru/"}
+  - {<<: *kuban, slug: kuban-aif, name: "АиФ — Кубань", type: regional_media, connector: rss, homepage: "https://kuban.aif.ru/"}
+  - {<<: *kuban, slug: krd-93ru, name: "93.ru", type: local_media, connector: rss, homepage: "https://93.ru/",
+     home: {q: "Краснодар", cc: RU, kind: locality}}
+  - {<<: *kuban, slug: ngkub, name: "Новая газета Кубани", type: regional_media, connector: rss, homepage: "https://ngkub.ru/"}
+  - {<<: *kuban, slug: yugtimes, name: "Юг Times", type: regional_media, connector: rss, homepage: "https://yugtimes.com/"}
+  - {<<: *kuban, slug: novorab, name: "Новороссийский рабочий", type: local_media, connector: rss, homepage: "https://novorab.ru/",
+     home: {q: "Новороссийск", cc: RU, kind: locality}}
+
+  # ---- Krasnodar Krai: official sites (without RSS they need an html_list config: item_xpath per site) ----
+  - {<<: *kuban, slug: admkrai, name: "Администрация Краснодарского края", type: official, connector: rss,
+     homepage: "https://admkrai.krasnodar.ru/"}
+  - {<<: *kuban, slug: krd-adm, name: "Администрация Краснодара", type: official, connector: rss, homepage: "https://krd.ru/",
+     home: {q: "Краснодар", cc: RU, kind: locality}}
+  - {<<: *kuban, slug: sochi-adm, name: "Администрация Сочи", type: official, connector: rss, homepage: "https://sochi.ru/",
+     home: {q: "Сочи", cc: RU, kind: locality}}
+  - {<<: *kuban, slug: mchs-23, name: "ГУ МЧС России по Краснодарскому краю", type: official, connector: rss,
+     homepage: "https://23.mchs.gov.ru/"}
+
+  # ---- Federal Russian media (published feed URLs) ----
+  - {<<: *ru, slug: tass, name: "ТАСС", type: media, connector: rss, url: "https://tass.ru/rss/v2.xml"}
+  - {<<: *ru, slug: ria, name: "РИА Новости", type: media, connector: rss, url: "https://ria.ru/export/rss2/archive/index.xml"}
+  - {<<: *ru, slug: interfax, name: "Интерфакс", type: media, connector: rss, url: "https://www.interfax.ru/rss.asp"}
+  - {<<: *ru, slug: kommersant, name: "Коммерсантъ", type: media, connector: rss, url: "https://www.kommersant.ru/RSS/news.xml"}
+  - {<<: *ru, slug: rbc, name: "РБК", type: media, connector: rss, url: "https://rssexport.rbc.ru/rbcnews/news/30/full.rss"}
+  - {<<: *ru, slug: lenta, name: "Лента.ру", type: media, connector: rss, url: "https://lenta.ru/rss"}
+  - {<<: *ru, slug: rg, name: "Российская газета", type: media, connector: rss, url: "https://rg.ru/xml/index.xml"}
+  - {<<: *ru, slug: mchs-rf, name: "МЧС России", type: official, connector: rss, homepage: "https://mchs.gov.ru/"}
+
+  # ---- open API aggregator: Russian-language headlines (titles + links only) ----
+  - {<<: *ru, slug: gdelt-ru, name: "GDELT — русскоязычные материалы", type: aggregator, connector: gdelt,
+     access_model: official_api, poll_interval: 900, url: "https://api.gdeltproject.org/api/v2/doc/doc",
+     config: {query: "sourcelang:russian", maxrecords: 75}}

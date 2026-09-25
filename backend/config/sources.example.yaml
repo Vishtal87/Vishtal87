@@ -1,4 +1,5 @@
-# REAL source registry — template for environments with Internet access.
+# REAL source registry (international) — template for environments with Internet access.
+# Russia / Krasnodar Krai candidates: sources.ru.candidates.yaml (verified with `geonews check-sources`).
 #
 # Status: NONE of these URLs could be fetched from the build sandbox (egress closed), so every entry ships with
 # `enabled: false`. Before enabling a source:
@@ -20,14 +21,6 @@ sources:
      url: "https://www.tagesschau.de/index~rss2.xml", languages: [de], country: DE, home: {q: "Germany", cc: DE, kind: country}}
   - {<<: *real, slug: lemonde-une, name: "Le Monde — À la une", type: media, connector: rss, access_model: public_feed,
      url: "https://www.lemonde.fr/rss/une.xml", languages: [fr], country: FR, home: {q: "France", cc: FR, kind: country}}
-  - {<<: *real, slug: tass, name: "ТАСС", type: media, connector: rss, access_model: public_feed,
-     url: "https://tass.ru/rss/v2.xml", languages: [ru], country: RU, timezone: Europe/Moscow, home: {q: "Россия", cc: RU, kind: country}}
-  - {<<: *real, slug: ria, name: "РИА Новости", type: media, connector: rss, access_model: public_feed,
-     url: "https://ria.ru/export/rss2/archive/index.xml", languages: [ru], country: RU, timezone: Europe/Moscow,
-     home: {q: "Россия", cc: RU, kind: country}}
-  - {<<: *real, slug: kommersant, name: "Коммерсантъ", type: media, connector: rss, access_model: public_feed,
-     url: "https://www.kommersant.ru/RSS/news.xml", languages: [ru], country: RU, timezone: Europe/Moscow,
-     home: {q: "Россия", cc: RU, kind: country}}
 
   # ---- official / intergovernmental feeds with coordinates (georss) ----
   - {<<: *real, slug: usgs-quakes, name: "USGS — землетрясения M2.5+ за сутки", type: official, connector: rss,
@@ -36,9 +29,9 @@ sources:
      access_model: public_feed, url: "https://www.gdacs.org/xml/rss.xml", languages: [en]}
 
   # ---- open API aggregator: discovery only (titles + links, never the publishers' full text) ----
-  - {<<: *real, slug: gdelt-ru, name: "GDELT DOC 2.0 — русскоязычные материалы", type: aggregator, connector: gdelt,
-     access_model: official_api, url: "https://api.gdeltproject.org/api/v2/doc/doc", languages: [ru], poll_interval: 900,
-     config: {query: "sourcelang:russian", maxrecords: 75}}
+  - {<<: *real, slug: gdelt-en, name: "GDELT DOC 2.0 — англоязычные материалы", type: aggregator, connector: gdelt,
+     access_model: official_api, url: "https://api.gdeltproject.org/api/v2/doc/doc", languages: [en], poll_interval: 900,
+     config: {query: "sourcelang:english", maxrecords: 75}}
 
   # ---- templates: fill in a concrete channel/site after checking its terms ----
   - {<<: *real, slug: tg-example, name: "Telegram: публичный канал (шаблон)", type: telegram, connector: telegram_public,

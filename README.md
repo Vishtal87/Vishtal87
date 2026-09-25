@@ -25,7 +25,21 @@ docker compose --profile demo up --build
 - Выпустить live-публикации демо-стенда: `curl -X POST 'localhost:8090/control/release?n=2'`.
   Через 20–40 с они появятся на карте и во всплывающем уведомлении.
 - Без профиля `demo` синтетические источники не запускаются. Реальные источники подключаются через
-  `GEONEWS_SOURCES=sources.example.yaml`: все они выключены, пока их не проверят, см. [docs/SOURCES.md](docs/SOURCES.md).
+  проверенный реестр: `geonews check-sources sources.ru.candidates.yaml --out …`, см. [docs/SOURCES.md](docs/SOURCES.md).
+
+## Продакшн: свой сервер с доменом
+
+HTTPS (Let's Encrypt через Caddy), настоящие источники, ежедневные копии базы. Всё управляется одним скриптом:
+
+```bash
+cp .env.example .env && nano .env        # домен, почта, пароль БД
+scripts/prod.sh init                     # сборка, схема, базовая база мест
+scripts/prod.sh geonames RU              # полная база мест России (все хутора)
+scripts/prod.sh verify-sources           # проверка источников Кубани и федеральных СМИ
+scripts/prod.sh up                       # запуск: https://ваш-домен
+```
+
+Пошагово, с подготовкой сервера и ответами на частые проблемы: [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## Локальная разработка
 
@@ -58,7 +72,7 @@ backend/.venv/bin/python -m geonews.cli import-geonames RU DE
 ## Проверки
 
 ```bash
-cd backend && .venv/bin/python -m pytest -q                      # 36 тестов (unit + интеграционные на geonews_test)
+cd backend && .venv/bin/python -m pytest -q                      # 41 тест (unit + интеграционные на geonews_test)
 .venv/bin/python -m geonews.tools.eval_geoparse                    # golden-набор геолокации, 45 случаев
 .venv/bin/python -m geonews.tools.eval_pipeline -v                 # сквозная сверка с gold-разметкой devstand
 cd ../frontend && pnpm typecheck && node e2e/acceptance.mjs        # 14 шагов критерия готовности (нужен свежий стенд)
@@ -104,7 +118,8 @@ docs/            исследование, архитектура, модель 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): архитектура и ADR
 - [docs/DATA_MODEL.md](docs/DATA_MODEL.md): схема PostGIS и индексы под обязательные запросы
 - [docs/PIPELINE.md](docs/PIPELINE.md): геолокация, дедупликация, кластеризация, доверие
-- [docs/SOURCES.md](docs/SOURCES.md): источники, модель доступа, правовые правила
+- [docs/SOURCES.md](docs/SOURCES.md): источники, модель доступа, правовые правила, проверка кандидатов
+- [docs/DEPLOY.md](docs/DEPLOY.md): развёртывание на VPS с доменом, бэкапы, обновления
 - [docs/VERIFICATION.md](docs/VERIFICATION.md): что проверено, как и с какими цифрами; red team; нагрузка
 
 ## Данные и лицензии

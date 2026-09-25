@@ -17,3 +17,7 @@ test-results/
 playwright-report/
 .env
 frontend/public/glyphs/
+
+# production secrets and database dumps
+.env
+backups/

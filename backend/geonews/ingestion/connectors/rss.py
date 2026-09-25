@@ -43,10 +43,12 @@ def parse_feed(text: str, media: str = "text") -> tuple[list[RawEntry], str | No
         lat, lon = _georss(e)
         out.append(RawEntry(
             external_id=str(ext_id), url=e.get("link"), title=e.get("title", ""), body_html=body,
-            published=e.get("published") or e.get("updated") or e.get("dc_date"), author=e.get("author"),
+            # membership test first: feedparser's .get("updated") falls back to "published" with a DeprecationWarning
+            published=next((e[k] for k in ("published", "updated", "dc_date") if k in e and e[k]), None),
+            author=e.get("author"),
             media=media, lat=lat, lon=lon, lang=feed_lang,
             extra={k: e.get(k) for k in ("yt_videoid", "yt_channelid") if e.get(k)},
-            raw=str({k: e.get(k) for k in ("id", "title", "link", "published", "updated", "summary")})[:8000],
+            raw=str({k: e[k] for k in ("id", "title", "link", "published", "updated", "summary") if k in e})[:8000],
         ))
     if d.bozo and not out:
         raise FetchError(f"malformed feed, no usable entries: {getattr(d, 'bozo_exception', 'parse error')}")

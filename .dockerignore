@@ -9,3 +9,5 @@ data
 frontend/public/glyphs
 frontend/e2e
 backend/tests
+.env
+backups

@@ -1,0 +1,19 @@
+{
+	email {$ACME_EMAIL}
+}
+
+# DOMAIN from .env. Caddy obtains and renews the Let's Encrypt certificate itself (ports 80 and 443 must be open).
+# With DOMAIN=localhost it issues a local self-signed certificate instead (for testing the stack).
+{$DOMAIN} {
+	reverse_proxy web:80 {
+		# live updates are Server-Sent Events (/api/stream): pass every chunk through immediately
+		flush_interval -1
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		-Server
+	}
+}

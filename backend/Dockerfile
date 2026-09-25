@@ -21,7 +21,8 @@ RUN --mount=type=secret,id=ca,required=false \
 COPY backend/config ./config
 COPY devstand /app/devstand
 COPY --from=vendor /repo/data/vendor /app/data/vendor
-RUN useradd --system --uid 10001 geonews && chown -R geonews /app
+# data/geonames exists in the image so a fresh named volume mounted there inherits the geonews owner
+RUN useradd --system --uid 10001 geonews && mkdir -p /app/data/geonames && chown -R geonews /app
 USER geonews
 EXPOSE 8000
 CMD ["python", "-m", "geonews.cli", "api", "--host", "0.0.0.0", "--port", "8000"]

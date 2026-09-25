@@ -1,0 +1,82 @@
+# Production overlay on top of docker-compose.yml: HTTPS on your domain (Caddy + Let's Encrypt), secrets from .env,
+# real source registry, daily database backups, bounded logs, health checks. Use it through scripts/prod.sh.
+# Requires Docker Compose v2.24+ (for `!reset`).
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+
+x-backend-env: &backend-env
+  GEONEWS_DSN: postgresql://geonews:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/geonews
+  GEONEWS_SOURCES: ${GEONEWS_SOURCES:-sources.ru.yaml}
+  GEONEWS_CORS: https://${DOMAIN:?set DOMAIN in .env}
+  GEONEWS_USER_AGENT: ${GEONEWS_USER_AGENT:-GeoNewsBot/1.0 (+https://github.com/Vishtal87/Vishtal87)}
+
+x-backend-volumes: &backend-volumes
+  - ./backend/config:/app/backend/config:ro     # source registries edited/verified on the server, no rebuild needed
+  - geodata:/app/data/geonames                  # downloaded GeoNames dumps (kept for re-imports)
+
+services:
+  db:
+    environment: { POSTGRES_USER: geonews, POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}", POSTGRES_DB: geonews }
+    command: ["postgres", "-c", "shared_buffers=${PG_SHARED_BUFFERS:-1GB}", "-c", "work_mem=32MB",
+              "-c", "effective_cache_size=${PG_EFFECTIVE_CACHE:-3GB}"]
+    restart: unless-stopped
+    logging: *logging
+
+  setup:
+    environment: *backend-env
+    volumes: *backend-volumes
+    logging: *logging
+
+  api:
+    environment: *backend-env
+    volumes: *backend-volumes
+    command: ["python", "-m", "geonews.cli", "api", "--host", "0.0.0.0", "--port", "8000", "--workers", "${API_WORKERS:-2}"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging: *logging
+
+  worker:
+    environment: *backend-env
+    volumes: *backend-volumes
+    logging: *logging
+
+  web:
+    ports: !reset []                              # only Caddy is reachable from outside
+    logging: *logging
+
+  caddy:                                          # HTTPS termination; certificates are obtained and renewed automatically
+    image: caddy:2-alpine
+    ports: ["80:80", "443:443", "443:443/udp"]
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [web]
+    restart: unless-stopped
+    logging: *logging
+
+  backup:                                         # pg_dump every BACKUP_EVERY_HOURS into ./backups, keeps BACKUP_KEEP files
+    image: postgis/postgis:16-3.4
+    entrypoint: ["sh", "/backup.sh"]
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      BACKUP_KEEP: ${BACKUP_KEEP:-7}
+      BACKUP_EVERY_HOURS: ${BACKUP_EVERY_HOURS:-24}
+    volumes:
+      - ./deploy/backup.sh:/backup.sh:ro
+      - ./backups:/backups
+    depends_on: { db: { condition: service_healthy } }
+    restart: unless-stopped
+    logging: *logging
+
+volumes:
+  geodata:
+  caddy_data:
+  caddy_config:

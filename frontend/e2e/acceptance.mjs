@@ -13,7 +13,8 @@ if (!standState.queued.includes('nov-1')) {
   process.exit(2)
 }
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
-const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark', locale: 'ru-RU' })
+const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark', locale: 'ru-RU',
+  ignoreHTTPSErrors: BASE.startsWith('https://localhost') })   // local test certificate of the production stack
 const page = await ctx.newPage()
 const errors = []
 page.on('pageerror', (e) => errors.push(`pageerror: ${String(e.stack ?? e.message).split('\n').slice(0, 3).join(' | ')}`))
