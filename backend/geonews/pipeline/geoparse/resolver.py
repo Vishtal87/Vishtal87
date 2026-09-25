@@ -39,6 +39,7 @@ def geoparse(
                 seen.setdefault(c.id, c)
         m.candidates = list(seen.values())
     mentions = _longest_matches([m for m in mentions if m.candidates])
+    _link_appositions(text, mentions)
 
     source = source or SourceContext()
     # pass 1: without inter-mention context
@@ -94,6 +95,17 @@ def _longest_matches(mentions: list[Mention]) -> list[Mention]:
     return out
 
 
+_APPOS_GAP = re.compile(r"^\s*(,|\(|in|im|en|de)\s*$", re.IGNORECASE)
+_APPOS_KINDS = {"country", "admin1", "admin2", "admin3"}
+
+
+def _link_appositions(text: str, mentions: list[Mention]) -> None:
+    """'Springfield, Illinois', 'Moscow, Idaho', 'Illán de Vacas (Toledo)': the second name qualifies the first."""
+    for a, b in zip(mentions, mentions[1:]):
+        if _APPOS_GAP.match(text[a.end:b.start]):
+            a.appos = {c.id for c in b.candidates if c.kind in _APPOS_KINDS}
+
+
 def _context(mentions: list[Mention], source: SourceContext) -> dict:
     """Admin areas implied by confidently resolved mentions + the source coverage area."""
     areas: set[int] = set()
@@ -141,6 +153,8 @@ def _score(m: Mention, source: SourceContext, ctx: dict | None) -> None:
                 s -= 3.0
         if c.colloquial and c.kind.startswith("admin"):
             s += 1.5
+        if m.appos and any(c.within(a) for a in m.appos):
+            s += 3.5
         if cues.locative:
             s += 1.0
         if n_cands == 1:
@@ -185,7 +199,7 @@ def _score(m: Mention, source: SourceContext, ctx: dict | None) -> None:
     rivals = [x for c, x in zip(m.candidates[1:9], m.scores[1:9]) if not (c.within(top.id) or top.within(c.id))]
     z = 1.0 + sum(math.exp(x - best) for x in rivals)
     p_best = 1.0 / z
-    strength = 1 / (1 + math.exp(-(best - ACCEPT - 1.0)))
+    strength = 1 / (1 + math.exp(-(best - ACCEPT - 0.5)))
     m.chosen = m.candidates[0]
     m.confidence = round(p_best * strength, 3)
 

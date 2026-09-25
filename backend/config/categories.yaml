@@ -1,0 +1,167 @@
+# Extensible news categories. Add a category = add an entry; no code changes.
+# keywords: normalized word PREFIXES (lemmas for ru/uk), matched against article tokens.
+# types: fine-grained event types used for event clustering compatibility.
+categories:
+  - slug: incidents
+    names: {ru: Происшествия, en: Incidents, de: Vorfälle, fr: Incidents, es: Sucesos, uk: Події, zh: 事故}
+    color: "#FF6B57"
+    icon: flame
+    sort: 10
+    keywords:
+      ru: [пожар, возгоран, загорел, горел, дтп, авари, столкнов, взрыв, обрушен, утонул, утонут, спасател, мчс, эвакуац, пострадавш, погиб, прорыв, задымлен, обрыв, отключен]
+      uk: [пожеж, дтп, авар, вибух, рятувальн, загин, постражд]
+      en: [fire, blaze, firefight, crash, collision, explosion, collapse, rescue, evacuat, injur, killed, dead, outage, leak]
+      de: [brand, feuer, unfall, explosion, einsturz, rettung, verletzt, getötet, evakuier, stromausfall]
+      fr: [incendie, feu, accident, explosion, effondrement, pompier, bless, evacu, panne]
+      es: [incendio, fuego, accidente, choque, explosion, derrumbe, bombero, herid, evacua, apagon]
+      it: [incendio, incidente, esplosion, crollo, vigili, ferit]
+    types:
+      fire: [пожар, возгоран, загорел, горел, пожеж, fire, blaze, brand, feuer, incendi, fuego, feu]
+      road_accident: [дтп, столкнов, авари, crash, collision, unfall, accident, choque, incidente]
+      explosion: [взрыв, вибух, explosion, esplosion]
+      collapse: [обрушен, collapse, einsturz, effondrement, derrumbe, crollo]
+      utility_outage: [отключен, обрыв, прорыв, outage, stromausfall, panne, apagon, leak]
+  - slug: crime
+    names: {ru: Криминал, en: Crime, de: Kriminalität, fr: Faits divers, es: Crimen, uk: Кримінал, zh: 犯罪}
+    color: "#C77DFF"
+    icon: shield
+    sort: 20
+    keywords:
+      ru: [убийств, убит, кража, краж, украл, грабеж, разбой, мошенни, задержан, арест, полици, следствен, уголовн, суд, приговор, стрельб, нападен]
+      uk: [вбивств, крадіж, шахрай, затрима, поліці, суд]
+      en: [murder, killed, theft, stole, robbery, fraud, arrest, detain, police, suspect, court, sentenc, shooting, assault]
+      de: [mord, diebstahl, raub, betrug, festgenommen, polizei, gericht, schüsse, angriff]
+      fr: [meurtre, vol, braquage, escroquer, interpell, police, tribunal, fusillade]
+      es: [asesinato, robo, fraude, detenid, arrest, policia, tribunal, tiroteo]
+  - slug: weather
+    names: {ru: Погода, en: Weather, de: Wetter, fr: Météo, es: Tiempo, uk: Погода, zh: 天气}
+    color: "#4CC9F0"
+    icon: cloud
+    sort: 30
+    keywords:
+      ru: [погод, ливен, ливн, дожд, снег, снегопад, метел, гроз, ураган, шторм, паводок, наводнен, подтоплен, жара, мороз, град, смерч, синоптик, гололед]
+      uk: [погод, злив, дощ, сніг, гроз, ураган, повін, спек, мороз]
+      en: [weather, rain, storm, snow, flood, hurricane, tornado, heatwave, heat, frost, hail, forecast, wind]
+      de: [wetter, regen, sturm, schnee, hochwasser, überschwemm, gewitter, hitze, frost, hagel, unwetter]
+      fr: [meteo, pluie, orage, tempete, neige, inondation, canicule, gel, grele]
+      es: [tiempo, lluvia, tormenta, nieve, inundacion, huracan, ola de calor, helada, granizo]
+    types:
+      flood: [паводок, наводнен, подтоплен, повін, flood, hochwasser, überschwemm, inondation, inundacion]
+      storm: [ураган, шторм, гроз, смерч, storm, hurricane, tornado, sturm, gewitter, orage, tempete, tormenta]
+      snow: [снег, метел, snow, schnee, neige, nieve]
+      heat: [жара, спек, heatwave, hitze, canicule]
+  - slug: transport
+    names: {ru: Транспорт, en: Transport, de: Verkehr, fr: Transports, es: Transporte, uk: Транспорт, zh: 交通}
+    color: "#FFB703"
+    icon: bus
+    sort: 40
+    keywords:
+      ru: [транспорт, автобус, трамвай, троллейбус, электричк, поезд, аэропорт, рейс, пробк, дорог, трасс, ремонт дорог, перекрыт, движен, мост, метро, парковк]
+      uk: [транспорт, автобус, потяг, аеропорт, рейс, дорог, міст]
+      en: [transport, bus, tram, train, airport, flight, traffic, road, highway, bridge, metro, subway, closure]
+      de: [verkehr, bus, bahn, zug, flughafen, flug, stau, straße, strasse, autobahn, brücke, sperrung]
+      fr: [transport, bus, tram, train, aeroport, vol, trafic, route, autoroute, pont, metro]
+      es: [transporte, autobus, tren, aeropuerto, vuelo, trafico, carretera, autopista, puente, metro]
+    types:
+      traffic_closure: [перекрыт, пробк, closure, sperrung, stau, trafic]
+  - slug: politics
+    names: {ru: Политика, en: Politics, de: Politik, fr: Politique, es: Política, uk: Політика, zh: 政治}
+    color: "#8E9AFF"
+    icon: landmark
+    sort: 50
+    keywords:
+      ru: [выбор, депутат, губернатор, мэр, глава, администрац, правительств, министр, президент, закон, законопроект, партия, дума, заксобрани, голосован, митинг, протест, санкци]
+      uk: [вибор, депутат, губернатор, мер, уряд, міністр, президент, закон, партія, рада, протест]
+      en: [election, vote, mayor, governor, council, parliament, minister, president, law, bill, party, protest, sanction, government]
+      de: [wahl, bürgermeister, landrat, gemeinderat, landtag, bundestag, minister, gesetz, partei, protest, regierung]
+      fr: [election, maire, conseil, prefet, depute, ministre, president, loi, parti, manifestation, gouvernement]
+      es: [eleccion, alcalde, gobernador, concejo, diputado, ministro, presidente, ley, partido, protesta, gobierno]
+  - slug: economy
+    names: {ru: Экономика, en: Economy, de: Wirtschaft, fr: Économie, es: Economía, uk: Економіка, zh: 经济}
+    color: "#52D39A"
+    icon: trending
+    sort: 60
+    keywords:
+      ru: [экономик, бюджет, цен, инфляц, тариф, зарплат, пенси, налог, рубл, курс, рынок, урожай, инвестиц]
+      uk: [економік, бюджет, ціни, інфляц, тариф, зарплат, пенсі, податок, гривн]
+      en: [economy, budget, price, inflation, tariff, wage, salary, pension, tax, market, harvest, investment]
+      de: [wirtschaft, haushalt, preis, inflation, tarif, lohn, rente, steuer, markt, ernte, investition]
+      fr: [economie, budget, prix, inflation, tarif, salaire, retraite, impot, marche, recolte]
+      es: [economia, presupuesto, precio, inflacion, tarifa, salario, pension, impuesto, mercado, cosecha]
+  - slug: business
+    names: {ru: Бизнес, en: Business, de: Unternehmen, fr: Entreprises, es: Negocios, uk: Бізнес, zh: 商业}
+    color: "#2EC4B6"
+    icon: briefcase
+    sort: 70
+    keywords:
+      ru: [компани, предприяти, завод, бизнес, предприниматель, открыл, магазин, торгов, стартап, банкрот, сделк]
+      uk: [компані, підприємств, завод, бізнес, магазин]
+      en: [company, business, factory, plant, startup, store, shop, retailer, bankrupt, deal, merger, hires, layoff]
+      de: [unternehmen, firma, fabrik, werk, geschäft, laden, insolvenz, übernahme]
+      fr: [entreprise, societe, usine, commerce, magasin, faillite, rachat]
+      es: [empresa, compania, fabrica, negocio, tienda, quiebra, adquisicion]
+  - slug: society
+    names: {ru: Общество, en: Society, de: Gesellschaft, fr: Société, es: Sociedad, uk: Суспільство, zh: 社会}
+    color: "#F48FB1"
+    icon: users
+    sort: 80
+    keywords:
+      ru: [жител, школ, детск сад, больниц, поликлиник, врач, образован, благоустро, двор, парк, волонтер, праздник, день сел, день город, ветеран, жкх, мусор, вод]
+      uk: [мешканц, школ, лікарн, лікар, освіт, парк, волонтер, свято]
+      en: [residents, school, hospital, clinic, doctor, education, park, volunteer, community, festival, housing]
+      de: [bürger, einwohner, schule, kita, krankenhaus, arzt, park, ehrenamt, fest, wohnung]
+      fr: [habitants, ecole, hopital, medecin, education, parc, benevole, fete, logement]
+      es: [vecinos, escuela, hospital, medico, educacion, parque, voluntario, fiesta, vivienda]
+  - slug: culture
+    names: {ru: Культура, en: Culture, de: Kultur, fr: Culture, es: Cultura, uk: Культура, zh: 文化}
+    color: "#FF9F1C"
+    icon: palette
+    sort: 90
+    keywords:
+      ru: [культур, музей, театр, концерт, выставк, фестивал, кино, фильм, книг, библиотек, спектакл, художник]
+      uk: [культур, музей, театр, концерт, виставк, фестивал]
+      en: [culture, museum, theatre, theater, concert, exhibition, festival, film, movie, book, library, artist]
+      de: [kultur, museum, theater, konzert, ausstellung, festival, film, buch, bibliothek]
+      fr: [culture, musee, theatre, concert, exposition, festival, film, livre]
+      es: [cultura, museo, teatro, concierto, exposicion, festival, pelicula, libro]
+  - slug: sport
+    names: {ru: Спорт, en: Sport, de: Sport, fr: Sport, es: Deporte, uk: Спорт, zh: 体育}
+    color: "#80ED99"
+    icon: trophy
+    sort: 100
+    keywords:
+      ru: [спорт, матч, футбол, хоккей, баскетбол, турнир, чемпионат, соревнован, победил, обыграл, счет, гол, олимпиад, забег, марафон]
+      uk: [спорт, матч, футбол, хокей, турнір, чемпіонат, змаган]
+      en: [sport, match, football, soccer, hockey, basketball, tournament, championship, league, goal, olympic, marathon]
+      de: [sport, spiel, fußball, fussball, eishockey, turnier, meisterschaft, liga, tor, marathon]
+      fr: [sport, match, football, hockey, tournoi, championnat, ligue, but, marathon]
+      es: [deporte, partido, futbol, hockey, torneo, campeonato, liga, gol, maraton]
+  - slug: technology
+    names: {ru: Технологии, en: Technology, de: Technologie, fr: Technologie, es: Tecnología, uk: Технології, zh: 科技}
+    color: "#48CAE4"
+    icon: cpu
+    sort: 110
+    keywords:
+      ru: [технолог, интернет, связ, цифров, приложени, искусствен интеллект, робот, кибер, хакер, сеть 5g, спутник, it]
+      uk: [технолог, інтернет, цифров, кібер]
+      en: [technology, internet, digital, app, software, artificial intelligence, robot, cyber, hacker, satellite, broadband]
+      de: [technologie, internet, digital, software, künstliche intelligenz, roboter, cyber, glasfaser]
+      fr: [technologie, internet, numerique, logiciel, intelligence artificielle, robot, cyber]
+      es: [tecnologia, internet, digital, aplicacion, software, inteligencia artificial, robot, ciber]
+  - slug: official
+    names: {ru: Официальные сообщения, en: Official statements, de: Amtliche Mitteilungen, fr: Communiqués officiels, es: Comunicados oficiales, uk: Офіційні повідомлення, zh: 官方通报}
+    color: "#B0BEC5"
+    icon: megaphone
+    sort: 120
+    keywords:
+      ru: [постановлен, распоряжен, официальн, сообщает пресс-служб, объявлени, уведомля, информиру]
+      en: [announce, notice, statement, official, ordinance, press release]
+      de: [bekanntmachung, mitteilung, verordnung, amtlich]
+      fr: [communique, arrete, avis, officiel]
+      es: [comunicado, aviso, decreto, oficial]
+  - slug: other
+    names: {ru: Другое, en: Other, de: Sonstiges, fr: Autre, es: Otros, uk: Інше, zh: 其他}
+    color: "#9E9E9E"
+    icon: dot
+    sort: 999
+    keywords: {}

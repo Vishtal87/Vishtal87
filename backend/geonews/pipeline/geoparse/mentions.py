@@ -6,7 +6,7 @@ import re
 from geonews.domain.settlement_lexicon import (
     ABBREVIATIONS_NEED_DOT, DIRECTION_WORDS, DISTANCE_UNITS, NEAR_CUES, ORG_CUES, POSTPOSITIVE_OK, TYPE_WORDS,
 )
-from geonews.domain.text_norm import Token, ngram_keys, token_lemmas, tokenize, word_is_common_noun
+from geonews.domain.text_norm import Token, ngram_keys, script_of, token_lemmas, tokenize, word_is_common_noun
 from geonews.pipeline.geoparse.model import Cues, Mention
 
 MAX_NGRAM = 4
@@ -88,6 +88,9 @@ def extract_mentions(title: str, body: str, lang: str | None) -> tuple[str, list
 
     mentions: list[Mention] = []
     for i, t0 in enumerate(toks):
+        if script_of(t0.text) == "hani":
+            mentions.extend(_cjk_mentions(t0, sent_idx(t0.start), t0.start < title_end))
+            continue
         if not _can_start(t0, text):
             continue
         for n in range(1, MAX_NGRAM + 1):
@@ -111,6 +114,22 @@ def extract_mentions(title: str, body: str, lang: str | None) -> tuple[str, list
             m.cues = _cues(text, toks, i, j, morph_lang, first_tok_of_sentence, title_end)
             mentions.append(m)
     return text, toks, mentions
+
+
+def _cjk_mentions(t: Token, sentence: int, in_title: bool) -> list[Mention]:
+    """Chinese/Japanese have no spaces: every 2..6-char substring of a Han run is a candidate span;
+    longest-match suppression and scoring pick the real toponyms."""
+    out = []
+    s = t.text
+    for a in range(len(s)):
+        for n in range(2, 7):
+            if a + n > len(s):
+                break
+            sub = s[a:a + n]
+            m = Mention(start=t.start + a, end=t.start + a + n, text=sub, keys=[sub], ntokens=n, sentence=sentence)
+            m.cues = Cues(in_title=in_title, locative=True)
+            out.append(m)
+    return out
 
 
 def _is_admin_word(t: Token, lang: str | None) -> bool:
@@ -202,6 +221,11 @@ def _cues(text: str, toks: list[Token], i: int, j: int, lang: str | None, first_
         c.relation = "near"
     if _ROUTE_RE.search(window) or re.match(r"\s*[—–-]\s*[A-ZА-ЯЁ]", text[toks[j].end:toks[j].end + 4]):
         c.route = True
+
+    # «Краснодар», „Kuban“: quoted names are clubs, companies, ships, stations — not the place itself
+    before, after = text[max(0, t0.start - 1):t0.start], text[toks[j].end:toks[j].end + 1]
+    if before in ("«", "„", "\"", "“") and after in ("»", "“", "\"", "”"):
+        c.org = True
 
     # common word check (ru/uk dictionary) for single-token spans without a type cue
     if i == j and lang and c.type_kind is None:

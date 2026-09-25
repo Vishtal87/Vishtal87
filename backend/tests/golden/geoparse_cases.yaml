@@ -1,0 +1,49 @@
+# Golden set for geolocation. Each case: lang, title, body, optional source (home area), expect.
+# expect: {name, cc, kind?, admin1?, relation?}  |  expect: none (must NOT be placed on the map)
+# relation 'near' => the event must NOT be attached to the anchor city itself; `name` is the anchor.
+# Hand-written sentences in news style; place names are real (GeoNames), events are illustrative.
+- {id: ru-village-type-cue, lang: ru, title: "Пожар в станице Динской", body: "Сегодня утром в станице Динской Краснодарского края загорелся жилой дом.", expect: {name: Dinskaya, cc: RU, relation: in}}
+- {id: ru-15km-from-city, lang: ru, title: "ДТП под Краснодаром", body: "В 15 км от Краснодара на трассе столкнулись два автомобиля.", expect: {name: Krasnodar, cc: RU, relation: near}}
+- {id: ru-colloquial-region, lang: ru, title: "Паводок на Кубани", body: "В Краснодарском крае из-за ливней поднялся уровень рек.", expect: {name: Krasnodar Krai, cc: RU, kind: admin1, relation: region}}
+- {id: ru-two-word-inflected, lang: ru, title: "Отключение воды", body: "В Горячем Ключе завтра отключат холодную воду.", expect: {name: Goryachiy Klyuch, cc: RU}}
+- {id: ru-street-named-after-city, lang: ru, title: "Прорыв трубы", body: "В Краснодаре на улице Ростовской прорвало трубу, жильцы остались без воды.", expect: {name: Krasnodar, cc: RU}}
+- {id: ru-moskovskaya-street, lang: ru, title: "Ремонт дороги", body: "На Московской улице в Сочи начался ремонт дорожного покрытия.", expect: {name: Sochi, cc: RU}}
+- {id: ru-quoted-clubs, lang: ru, title: "ФК «Краснодар» обыграл «Ростов»", body: "Матч завершился со счётом 2:0.", expect: {name: Krasnodar, cc: RU, relation: about}}
+- {id: ru-homonym-with-source, lang: ru, title: "Праздник в Ивановке", body: "Жители Ивановки отметили день села.", source: {name: Primorye, cc: RU, kind: admin1}, expect: {name: Ivanovka, cc: RU, admin1: Primorye}}
+- {id: ru-homonym-no-context, lang: ru, title: "Праздник в Ивановке", body: "Жители Ивановки отметили день села.", expect: none}
+- {id: ru-city-and-republic, lang: ru, title: "Новая школа", body: "В Майкопе, столице Адыгеи, открыли новую школу.", expect: {name: Maykop, cc: RU}}
+- {id: ru-no-place, lang: ru, title: "Учёные создали новый материал", body: "Исследователи получили сверхпрочный композит для строительства.", expect: none}
+- {id: ru-two-cities, lang: ru, title: "Режим ЧС в Сочи", body: "В Сочи и Новороссийске ввели режим ЧС из-за ливней.", expect: {name: Sochi, cc: RU}}
+- {id: ru-armavir-russia, lang: ru, title: "В Армавире открыли парк", body: "Новый парк появился в центре Армавира.", expect: {name: Armavir, cc: RU}}
+- {id: ru-hamlet-near, lang: ru, title: "Трактор перевернулся", body: "Около хутора Каштаны перевернулся трактор, водитель не пострадал.", source: {name: Krasnodar Krai, cc: RU, kind: admin1}, expect: {name: Kashtany, cc: RU}}
+- {id: ru-direction-distance, lang: ru, title: "Лесной пожар", body: "В 20 км к северу от Майкопа горит лес.", expect: {name: Maykop, cc: RU, relation: near}}
+- {id: ru-person-not-place, lang: ru, title: "Визит губернатора", body: "Губернатор Вениамин Кондратьев посетил Армавир и осмотрел новую больницу.", expect: {name: Armavir, cc: RU}}
+- {id: ru-nizhny, lang: ru, title: "Метро продлят", body: "В Нижнем Новгороде продлят линию метро.", expect: {name: Nizhniy Novgorod, cc: RU}}
+- {id: ru-rostov-hyphen, lang: ru, title: "Мост закрыли", body: "В Ростове-на-Дону закрыли Ворошиловский мост.", expect: {name: Rostov-on-Don, cc: RU}}
+- {id: ru-route-two-cities, lang: ru, title: "Новый поезд", body: "Из Краснодара в Сочи запустят новый скоростной поезд.", expect: {any: [Krasnodar, Sochi], cc: RU}}
+- {id: ru-route-dtp-at-village, lang: ru, title: "ДТП на трассе М-4 «Дон»", body: "На трассе М-4 «Дон» у станицы Динской столкнулись три машины.", expect: {name: Dinskaya, cc: RU}}
+- {id: ru-region-only, lang: ru, title: "Жара", body: "В Краснодарском крае ожидается жара до +40.", expect: {name: Krasnodar Krai, cc: RU, kind: admin1}}
+- {id: ru-moscow-metonymy, lang: ru, title: "Москва ответила", body: "Москва ответила на заявление зарубежных партнёров.", expect: {name: Moscow, cc: RU}}
+- {id: ru-hyperlocal-source-no-place, lang: ru, title: "Внимание жителям", body: "Завтра с 9 до 17 не будет света на улице Мира.", source: {name: Dinskaya, cc: RU, kind: locality}, expect: {name: Dinskaya, cc: RU, relation: source_area}}
+- {id: ru-lowercase-common-word, lang: ru, title: "Мир и заря", body: "Мир вокруг меняется, заря новой эпохи.", expect: none}
+- {id: ru-coordinates, lang: ru, title: "Координаты находки", body: "Находка обнаружена в точке 45.0355, 38.9753 специалистами.", expect: {name: Krasnodar, cc: RU, relation: coordinates}}
+- {id: uk-kyiv, lang: uk, title: "Вибух у Києві", body: "У Києві пролунав вибух, рятувальники працюють на місці.", expect: {name: Kyiv, cc: UA}}
+- {id: uk-kharkiv, lang: uk, title: "Злива в Харкові", body: "Сильна злива підтопила вулиці Харкова.", expect: {name: Kharkiv, cc: UA, kind: locality}}
+- {id: en-near-paris, lang: en, title: "Fire near Paris", body: "Firefighters battled a blaze in a warehouse outside Paris on Monday.", expect: {name: Paris, cc: FR, relation: near}}
+- {id: en-springfield-state, lang: en, title: "Arrest made", body: "Police said the suspect was detained in Springfield, Illinois.", expect: {name: Springfield, cc: US, admin1: Illinois}}
+- {id: en-police-sentence-initial, lang: en, title: "Update", body: "Police said the investigation continues and more details will follow.", expect: none}
+- {id: en-person-paris, lang: en, title: "Celebrity visit", body: "Paris Hilton arrived in London for a charity gala.", expect: {name: London, cc: GB}}
+- {id: en-moscow-idaho, lang: en, title: "Flooding", body: "Flooding hit Moscow, Idaho after heavy rain.", expect: {name: Moscow, cc: US, admin1: Idaho}}
+- {id: en-village-of, lang: en, title: "Storm damage", body: "A storm damaged roofs in the village of Dierfeld.", expect: {name: Dierfeld, cc: DE}}
+- {id: de-small-village, lang: de, title: "Brand in Dierfeld", body: "In der kleinen Gemeinde Dierfeld in Rheinland-Pfalz brannte eine Scheune.", expect: {name: Dierfeld, cc: DE}}
+- {id: de-bei-koeln, lang: de, title: "Unfall bei Köln", body: "Auf der A1 bei Köln kam es zu einem schweren Unfall.", expect: {name: Köln, cc: DE, relation: near}}
+- {id: de-passau, lang: de, title: "Hochwasser in Passau", body: "In Passau steigen die Pegel weiter.", expect: {name: Passau, cc: DE}}
+- {id: fr-lyon, lang: fr, title: "Incendie à Lyon", body: "Un incendie s'est déclaré dans un immeuble à Lyon.", expect: {name: Lyon, cc: FR}}
+- {id: fr-km-de-marseille, lang: fr, title: "Accident", body: "Un accident s'est produit à 10 km de Marseille.", expect: {name: Marseille, cc: FR, relation: near}}
+- {id: es-tiny-village, lang: es, title: "Incendio en Illán de Vacas", body: "Un incendio afectó a una nave en Illán de Vacas, en la provincia de Toledo.", expect: {name: Illán de Vacas, cc: ES}}
+- {id: it-tiny-comune, lang: it, title: "Frana a Morterone", body: "Una frana ha bloccato la strada per Morterone.", expect: {name: Morterone, cc: IT}}
+- {id: zh-beijing, lang: zh, title: "北京发生火灾", body: "北京市朝阳区一栋居民楼发生火灾。", expect: {name: Beijing, cc: CN}}
+- {id: zh-shanghai, lang: zh, title: "上海暴雨", body: "上海遭遇强降雨，多条道路积水。", expect: {name: Shanghai, cc: CN}}
+- {id: en-geotag-conflict, lang: en, title: "Fire in Lyon", body: "A fire broke out in a building in Lyon.", hint: [55.75, 37.62], expect: {name: Lyon, cc: FR}}
+- {id: ru-kashtany-no-source, lang: ru, title: "Трактор перевернулся", body: "Около хутора Каштаны перевернулся трактор.", expect: {any: [Kashtany], cc_any: [RU, UA]}}
+- {id: ru-adygea-alias, lang: ru, title: "Дожди в Адыгее", body: "В Адыгее из-за дождей размыло дороги.", expect: {name: Adygeya Republic, cc: RU, kind: admin1}}

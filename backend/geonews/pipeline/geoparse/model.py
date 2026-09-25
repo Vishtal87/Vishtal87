@@ -60,6 +60,7 @@ class Mention:
     chosen: Candidate | None = None
     confidence: float = 0.0
     role: str = "mentioned"            # primary | secondary | near | mentioned | street | org | route
+    appos: set[int] = field(default_factory=set)   # "Springfield, Illinois": ids of the admin areas named right after
 
 
 @dataclass(slots=True)
