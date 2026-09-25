@@ -29,10 +29,17 @@ docker compose --profile demo up --build
 
 ## Продакшн: свой сервер с доменом
 
-HTTPS (Let's Encrypt через Caddy), настоящие источники, ежедневные копии базы. Всё управляется одним скриптом:
+HTTPS (Let's Encrypt через Caddy), настоящие источники, ежедневные копии базы. На чистом Ubuntu/Debian-сервере
+под root достаточно одной команды: адрес сайта она выведет в конце.
 
 ```bash
-cp .env.example .env && nano .env        # домен, почта, пароль БД
+curl -fsSL https://raw.githubusercontent.com/Vishtal87/Vishtal87/claude/geo-news-interactive-map-29asu8/scripts/bootstrap-server.sh | bash
+```
+
+То же вручную, одним скриптом:
+
+```bash
+cp .env.example .env && nano .env        # домен, IP, пароль БД
 scripts/prod.sh init                     # сборка, схема, базовая база мест
 scripts/prod.sh geonames RU              # полная база мест России (все хутора)
 scripts/prod.sh verify-sources           # проверка источников Кубани и федеральных СМИ

@@ -1,10 +1,4 @@
-{
-	email {$ACME_EMAIL}
-}
-
-# DOMAIN from .env. Caddy obtains and renews the Let's Encrypt certificate itself (ports 80 and 443 must be open).
-# With DOMAIN=localhost it issues a local self-signed certificate instead (for testing the stack).
-{$DOMAIN} {
+(site) {
 	reverse_proxy web:80 {
 		# live updates are Server-Sent Events (/api/stream): pass every chunk through immediately
 		flush_interval -1
@@ -16,4 +10,16 @@
 		X-Frame-Options "DENY"
 		-Server
 	}
+}
+
+# DOMAIN from .env. Caddy obtains and renews the HTTPS certificate itself (ports 80 and 443 must be open).
+# No domain of your own: DOMAIN=<ip-with-dashes>.sslip.io resolves to the server and gets a certificate too.
+# DOMAIN=localhost gets a local self-signed certificate (for testing the stack).
+{$DOMAIN} {
+	import site
+}
+
+# Plain HTTP on the server's IP: a way in before DNS or the certificate are ready.
+http://{$PUBLIC_IP} {
+	import site
 }
