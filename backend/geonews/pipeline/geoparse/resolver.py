@@ -201,6 +201,7 @@ def _score(m: Mention, source: SourceContext, ctx: dict | None) -> None:
     p_best = 1.0 / z
     strength = 1 / (1 + math.exp(-(best - ACCEPT - 0.5)))
     m.chosen = m.candidates[0]
+    m.p_best = round(p_best, 3)
     m.confidence = round(p_best * strength, 3)
 
 
@@ -250,6 +251,13 @@ def _focus(kept: list[Mention]) -> Mention | None:
 
 
 def _decide(m: Mention, kept: list[Mention]) -> LocationDecision:
+    d = _decide_inner(m, kept)
+    d.ambiguity = round(1 - m.p_best, 3)
+    d.evidence["ambiguity"] = d.ambiguity
+    return d
+
+
+def _decide_inner(m: Mention, kept: list[Mention]) -> LocationDecision:
     c = m.chosen
     cues = m.cues
     ev = {

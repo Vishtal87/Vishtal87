@@ -1,0 +1,225 @@
+# SYNTHETIC TEST CORPUS — NOT REAL NEWS.
+# Real place names (GeoNames) + illustrative, invented events. Every source is named "Демо"/"Demo" and is
+# flagged synthetic in the product UI. Purpose: end-to-end verification of ingestion, geolocation,
+# deduplication, clustering, trust labels and realtime delivery where the real web is unreachable.
+#
+# at: minutes relative to devstand start (negative = in the past). release: live -> held until /control/release.
+# update_of: later version of an earlier report (same guid/url). forward: telegram forward of an earlier report.
+# gold: expected place (GeoNames English name + country) and a cluster key for B-cubed evaluation.
+
+sources:
+  demo-kuban-news:      {format: rss, date_style: rfc822_offset, tz: "+03:00"}
+  demo-krasnodar-24:    {format: rss, date_style: naive_local}          # no timezone in feed (source tz = Moscow)
+  demo-tg-dinskaya:     {format: telegram}
+  demo-tg-kuban-live:   {format: telegram}
+  demo-tg-primorye:     {format: telegram}
+  demo-kyiv-live:       {format: telegram}
+  demo-mchs-kuban:      {format: html_list}
+  demo-adm-gk:          {format: rss, date_style: rfc822_offset, tz: "+03:00"}
+  demo-yt-kuban-tv:     {format: youtube}
+  demo-sochi-blog:      {format: rss, date_style: iso_z}
+  demo-ria-federal:     {format: rss, date_style: rfc822_offset, tz: "+03:00"}
+  demo-rlp-lokal:       {format: atom, tz: "+02:00"}
+  demo-dw-de:           {format: atom, tz: "+02:00"}
+  demo-world-en:        {format: rss, date_style: rfc822_gmt}
+  demo-idaho-local:     {format: rss, date_style: rfc822_offset, tz: "-06:00"}
+  demo-lyon-info:       {format: rss, date_style: rfc822_offset, tz: "+02:00"}
+  demo-toledo-hoy:      {format: rss, date_style: rfc822_offset, tz: "+02:00"}
+  demo-lecco-notizie:   {format: rss, date_style: rfc822_offset, tz: "+02:00"}
+  demo-gdelt:           {format: gdelt}
+  demo-flaky:           {format: rss, date_style: rfc822_offset, tz: "+03:00", fail: {mode: "503", first_requests: 2}}
+  demo-broken-xml:      {format: broken}
+
+stories:
+  # ---------------------------------------------------------------- village-level event, 7 sources, official + video
+  - key: dinskaya-fire
+    gold: {place: Dinskaya, cc: RU, category: incidents}
+    reports:
+      - {id: dinf-1, source: demo-tg-dinskaya, at: -95, title: "🔥 Горит дом на улице Красной", body: "Жители станицы Динской сообщают о пожаре в частном доме на улице Красной. Пожарные уже выехали."}
+      - {id: dinf-2, source: demo-tg-kuban-live, at: -90, forward: dinf-1, title: "🔥 Горит дом на улице Красной", body: "Жители станицы Динской сообщают о пожаре в частном доме на улице Красной. Пожарные уже выехали. Подписывайтесь на Кубань Live!"}
+      - {id: dinf-3, source: demo-kuban-news, at: -80, title: "В станице Динской загорелся частный дом", body: "Пожар в жилом доме на улице Красной в станице Динской Краснодарского края начался около 13:40. На месте работают три пожарных расчёта."}
+      - {id: dinf-4, source: demo-mchs-kuban, at: -70, title: "Ликвидация возгорания в Динском районе", body: "В 13:41 поступило сообщение о возгорании жилого дома в ст. Динской. К тушению привлечены 12 человек и 3 единицы техники. Пострадавших нет."}
+      - {id: dinf-5, source: demo-krasnodar-24, at: -60, title: "Пожар в Динской: огонь охватил 120 квадратных метров", body: "В станице Динской горит частный дом, площадь пожара составляет 120 квадратных метров, сообщают спасатели."}
+      - {id: dinf-6, source: demo-yt-kuban-tv, at: -45, media: video, title: "Видео: пожар в станице Динской", body: "Кадры с места пожара в станице Динской: огонь охватил крышу частного дома на улице Красной."}
+      - {id: dinf-7, source: demo-ria-federal, at: -40, title: "На Кубани загорелся жилой дом", body: "В станице Динской Краснодарского края произошёл пожар в частном доме, сообщили в МЧС."}
+      - {id: dinf-8, source: demo-kuban-news, at: 2, release: live, update_of: dinf-3, title: "Пожар в станице Динской потушен", body: "Пожар в жилом доме на улице Красной в станице Динской Краснодарского края потушен. Площадь возгорания составила 120 квадратных метров, пострадавших нет."}
+      - {id: dinf-9, source: demo-mchs-kuban, at: 5, release: live, title: "Пожар в ст. Динской ликвидирован", body: "Пожар в жилом доме в станице Динской ликвидирован в 15:05. Пострадавших нет, причины возгорания устанавливаются."}
+
+  # ---------------------------------------------------------------- "15 km from Krasnodar" must not be Krasnodar
+  - key: krasnodar-near-crash
+    gold: {place: Krasnodar, cc: RU, relation: near, category: incidents}
+    reports:
+      - {id: kdtp-1, source: demo-kuban-news, at: -130, title: "ДТП под Краснодаром: столкнулись три машины", body: "В 15 км от Краснодара на трассе Р-217 столкнулись три автомобиля. Пострадали два человека."}
+      - {id: kdtp-2, source: demo-tg-kuban-live, at: -125, title: "Массовое ДТП на трассе под Краснодаром", body: "Три машины столкнулись в 15 км от Краснодара, двое пострадавших, движение затруднено."}
+      - {id: kdtp-3, source: demo-krasnodar-24, at: -110, title: "Три автомобиля столкнулись на трассе Р-217", body: "Авария произошла в 15 км от Краснодара, пострадавших госпитализировали."}
+
+  # ---------------------------------------------------------------- region-level news (not the capital)
+  - key: kuban-flood-warning
+    gold: {place: Krasnodar Krai, cc: RU, kind: admin1, category: weather}
+    reports:
+      - {id: kfl-1, source: demo-ria-federal, at: -300, title: "На Кубани из-за ливней поднялись реки", body: "В Краснодарском крае объявлено штормовое предупреждение: из-за ливней уровень рек поднялся на 1,5 метра."}
+      - {id: kfl-2, source: demo-kuban-news, at: -290, title: "Штормовое предупреждение на Кубани", body: "Синоптики предупредили о сильных ливнях и подъёме уровня рек по всему Краснодарскому краю."}
+
+  # ---------------------------------------------------------------- official municipal + media
+  - key: gk-water
+    gold: {place: Goryachiy Klyuch, cc: RU, category: society}
+    reports:
+      - {id: gkw-1, source: demo-adm-gk, at: -200, title: "Плановое отключение холодного водоснабжения", body: "Уважаемые жители! Завтра с 9:00 до 17:00 в Горячем Ключе будет отключено холодное водоснабжение по улицам Ленина и Школьной."}
+      - {id: gkw-2, source: demo-krasnodar-24, at: -180, title: "В Горячем Ключе отключат воду", body: "Завтра часть Горячего Ключа останется без холодной воды на 8 часов, сообщили в администрации города."}
+
+  # ---------------------------------------------------------------- two different fires in one big city: must NOT merge
+  - key: krasnodar-warehouse-fire
+    gold: {place: Krasnodar, cc: RU, category: incidents}
+    reports:
+      - {id: kwf-1, source: demo-kuban-news, at: -240, title: "Пожар на складе в промзоне Краснодара", body: "В Краснодаре на улице Уральской горит склад стройматериалов площадью 500 квадратных метров."}
+      - {id: kwf-2, source: demo-tg-kuban-live, at: -235, title: "Горит склад на Уральской", body: "Столб дыма над складом стройматериалов на Уральской в Краснодаре видно издалека, площадь пожара 500 квадратов."}
+  - key: krasnodar-flat-fire
+    gold: {place: Krasnodar, cc: RU, category: incidents}
+    reports:
+      - {id: kff-1, source: demo-krasnodar-24, at: -230, title: "В многоэтажке на Гидростроителей загорелась квартира", body: "В Краснодаре в квартире на девятом этаже дома на улице Гидростроителей произошёл пожар, эвакуированы 30 жильцов."}
+      - {id: kff-2, source: demo-tg-kuban-live, at: -225, title: "Эвакуация жильцов на Гидростроителей", body: "Из горящей многоэтажки на Гидростроителей в Краснодаре эвакуировали 30 человек, квартира выгорела полностью."}
+
+  # ---------------------------------------------------------------- one source with a WRONG geotag (Moscow coords)
+  - key: sochi-landslide
+    gold: {place: Sochi, cc: RU, category: incidents}
+    reports:
+      - {id: sls-1, source: demo-sochi-blog, at: -150, lat: 55.7558, lon: 37.6173, title: "Оползень в Сочи перекрыл дорогу", body: "В Сочи после ливней сошёл оползень, перекрыта дорога в Хосте. Объезд через Кудепсту."}
+      - {id: sls-2, source: demo-kuban-news, at: -140, title: "В Сочи сошёл оползень", body: "Оползень перекрыл дорогу в Хостинском районе Сочи после ливней, пострадавших нет."}
+
+  # ---------------------------------------------------------------- homonyms resolved by the source's home area
+  - key: primorye-ivanovka
+    gold: {place: Ivanovka, cc: RU, admin1: Primorye, category: society}
+    reports:
+      - {id: piv-1, source: demo-tg-primorye, at: -500, title: "День села в Ивановке", body: "Жители Ивановки отметили день села: концерт, ярмарка и спортивные состязания."}
+  - key: krasnoye-bridge
+    gold: {place: Krasnoye, cc: RU, admin1: Krasnodar Krai, category: transport}
+    reports:
+      - {id: kbr-1, source: demo-tg-kuban-live, at: -330, title: "В селе Красном отремонтировали мост", body: "Жители села Красного дождались ремонта моста через реку, движение открыто."}
+  - key: yaroslavskaya-kindergarten
+    gold: {place: Yaroslavskaya, cc: RU, category: society}
+    reports:
+      - {id: yks-1, source: demo-kuban-news, at: -400, title: "В станице Ярославской открыли детский сад", body: "В станице Ярославской Мостовского района открылся новый детский сад на 120 мест."}
+
+  # ---------------------------------------------------------------- small villages
+  - key: kashtany-tractor
+    gold: {place: Kashtany, cc: RU, category: incidents}
+    reports:
+      - {id: kas-1, source: demo-tg-kuban-live, at: -60, title: "Трактор перевернулся у хутора Каштаны", body: "Около хутора Каштаны перевернулся трактор, водитель госпитализирован."}
+  - key: glafirovka-beach
+    gold: {place: Glafirovka, cc: RU, category: society}
+    reports:
+      - {id: gla-1, source: demo-tg-kuban-live, at: -420, title: "В Глафировке снова открыли пляж", body: "Пляж в селе Глафировка Ейского района снова открыт для отдыхающих после очистки."}
+  - key: mezmay-tourists
+    gold: {place: Mezmay, cc: RU, category: incidents}
+    reports:
+      - {id: mez-1, source: demo-yt-kuban-tv, at: -800, media: video, title: "Мезмай: туристы застряли на Орлиной полке", body: "Спасатели помогли группе туристов спуститься с Орлиной полки в посёлке Мезмай."}
+  - key: adagum-water
+    gold: {place: Adagum, cc: RU, category: society}
+    reports:
+      - {id: ada-1, source: demo-kuban-news, at: -260, title: "В хуторе Адагум починили водопровод", body: "Жители хутора Адагум Крымского района снова с водой: аварийная бригада заменила 40 метров трубы."}
+  - key: armavir-bridge
+    gold: {place: Armavir, cc: RU, category: transport}
+    reports:
+      - {id: arm-1, source: demo-kuban-news, at: -350, title: "В Армавире отремонтируют мост через Кубань", body: "Ремонт моста в Армавире начнётся в октябре и продлится до весны."}
+
+  # ---------------------------------------------------------------- cross-language event in a 7-person village
+  - key: dierfeld-barn
+    gold: {place: Dierfeld, cc: DE, category: incidents}
+    reports:
+      - {id: dier-1, source: demo-rlp-lokal, at: -600, title: "Scheune in Dierfeld abgebrannt", body: "In der kleinen Gemeinde Dierfeld im Landkreis Bernkastel-Wittlich brannte in der Nacht eine Scheune nieder. Die Feuerwehr war mit 25 Kräften im Einsatz."}
+      - {id: dier-2, source: demo-dw-de, at: -560, title: "Brand in Dierfeld: Scheune zerstört", body: "Im rheinland-pfälzischen Dierfeld, einem der kleinsten Orte Deutschlands, ist eine Scheune abgebrannt. 25 Feuerwehrleute waren im Einsatz."}
+      - {id: dier-3, source: demo-world-en, at: -500, title: "Barn fire in tiny German village of Dierfeld", body: "A barn burned down overnight in Dierfeld, a village in Rhineland-Palatinate with only a handful of residents. 25 firefighters responded."}
+      - {id: dier-4, source: demo-ria-federal, at: -480, title: "В немецкой деревне Дирфельд сгорел сарай", body: "В крошечной деревне Дирфельд в Германии ночью сгорел сарай, на месте работали 25 пожарных."}
+
+  # ---------------------------------------------------------------- homonym abroad + time zone near midnight
+  - key: moscow-idaho-flood
+    gold: {place: Moscow, cc: US, admin1: Idaho, category: weather}
+    reports:
+      - {id: mid-1, source: demo-idaho-local, at: -380, title: "Flash flooding hits Moscow", body: "Heavy rain caused flash flooding on Main Street in Moscow, Idaho late on Tuesday night."}
+      - {id: mid-2, source: demo-world-en, at: -340, title: "Flash floods in Moscow, Idaho", body: "Streets in Moscow, Idaho were flooded after heavy overnight rain, officials said."}
+
+  - key: lyon-fire
+    gold: {place: Lyon, cc: FR, category: incidents}
+    reports:
+      - {id: lyo-1, source: demo-lyon-info, at: -700, title: "Incendie dans un immeuble à Lyon", body: "Un incendie s'est déclaré dans un immeuble du 7e arrondissement de Lyon, 40 habitants ont été évacués."}
+      - {id: lyo-2, source: demo-world-en, at: -650, title: "Fire forces evacuation of 40 in Lyon", body: "Around 40 residents were evacuated after a fire broke out in an apartment building in Lyon, France."}
+      - {id: lyo-3, source: demo-gdelt, at: -640, title: "Lyon: 40 residents evacuated after apartment building fire", body: ""}
+
+  - key: illan-fire
+    gold: {place: Illán de Vacas, cc: ES, category: incidents}
+    reports:
+      - {id: ill-1, source: demo-toledo-hoy, at: -800, title: "Incendio en una nave de Illán de Vacas", body: "Los bomberos sofocaron un incendio en una nave agrícola de Illán de Vacas, el pueblo menos poblado de la provincia de Toledo."}
+
+  - key: morterone-landslide
+    gold: {place: Morterone, cc: IT, category: incidents}
+    reports:
+      - {id: mor-1, source: demo-lecco-notizie, at: -900, title: "Frana sulla strada per Morterone", body: "Una frana ha bloccato la strada provinciale che porta a Morterone, il comune più piccolo d'Italia."}
+
+  - key: kyiv-explosion
+    gold: {place: Kyiv, cc: UA, category: incidents}
+    reports:
+      - {id: kyv-1, source: demo-kyiv-live, at: -50, title: "Вибух у Києві", body: "У Києві пролунав вибух у Голосіївському районі, на місці працюють рятувальники."}
+      - {id: kyv-2, source: demo-world-en, at: -35, title: "Explosion reported in Kyiv", body: "An explosion was heard in Kyiv's Holosiivskyi district, emergency services said."}
+      - {id: kyv-3, source: demo-gdelt, at: -30, title: "Explosion heard in Kyiv, emergency services respond", body: ""}
+
+  # ---------------------------------------------------------------- not live: anniversary & backfill
+  - key: krymsk-anniversary
+    gold: {place: Krymsk, cc: RU, category: weather, historical: true}
+    reports:
+      - {id: kry-1, source: demo-kuban-news, at: -1000, title: "14 лет назад Крымск пережил наводнение", body: "Годовщина трагедии: 14 лет назад вода затопила Крымск. В городе прошли памятные мероприятия."}
+  - key: krasnodar-embankment-backfill
+    gold: {place: Krasnodar, cc: RU, category: society, backfill: true}
+    reports:
+      - {id: kbk-1, source: demo-krasnodar-24, at: -7200, title: "В Краснодаре открыли новую набережную", body: "Новая набережная длиной 2 км открылась в центре Краснодара."}
+
+  # ---------------------------------------------------------------- recurring daily post (must not be a duplicate of yesterday)
+  - key: dinskaya-weather-yesterday
+    gold: {place: Dinskaya, cc: RU, category: weather}
+    reports:
+      - {id: dw-1, source: demo-tg-dinskaya, at: -1500, title: "☀️ Прогноз погоды на сегодня", body: "Доброе утро, Динская! Сегодня +27, без осадков, ветер северо-восточный 3 м/с."}
+  - key: dinskaya-weather-today
+    gold: {place: Dinskaya, cc: RU, category: weather}
+    reports:
+      - {id: dw-2, source: demo-tg-dinskaya, at: -65, title: "☀️ Прогноз погоды на сегодня", body: "Доброе утро, Динская! Сегодня +25, без осадков, ветер северо-восточный 4 м/с."}
+
+  # ---------------------------------------------------------------- hyperlocal source, no place in text
+  - key: dinskaya-power
+    gold: {place: Dinskaya, cc: RU, relation: source_area, category: society}
+    reports:
+      - {id: dpw-1, source: demo-tg-dinskaya, at: -30, title: "⚡ Отключение света", body: "Завтра с 9:00 до 17:00 не будет света на улицах Мира, Советской и Кирова."}
+
+  # ---------------------------------------------------------------- must stay OFF the map
+  - key: science-unlocated
+    gold: {place: none}
+    reports:
+      - {id: sci-1, source: demo-ria-federal, at: -100, title: "Учёные создали сверхпрочный композит", body: "Исследователи получили новый композитный материал для строительства мостов."}
+  - key: ivanovka-ambiguous
+    gold: {place: none}
+    reports:
+      - {id: iva-1, source: demo-ria-federal, at: -120, title: "В Ивановке открыли новый ФАП", body: "Жители Ивановки получили новый фельдшерско-акушерский пункт."}
+
+  # ---------------------------------------------------------------- failing source that recovers
+  - key: kropotkin-fair
+    gold: {place: Kropotkin, cc: RU, category: economy}
+    reports:
+      - {id: kro-1, source: demo-flaky, at: -300, title: "В Кропоткине пройдёт сельскохозяйственная ярмарка", body: "В субботу в Кропоткине пройдёт ярмарка: фермеры привезут урожай и мёд по ценам ниже рыночных."}
+
+  # ---------------------------------------------------------------- dense city: many unrelated events
+  - {key: krd-tram, gold: {place: Krasnodar, cc: RU, category: transport}, reports: [{id: krd-1, source: demo-krasnodar-24, at: -600, title: "В Краснодаре запустят новую трамвайную линию", body: "Трамвайная линия по улице Московской в Краснодаре откроется в декабре."}]}
+  - {key: krd-festival, gold: {place: Krasnodar, cc: RU, category: culture}, reports: [{id: krd-2, source: demo-kuban-news, at: -560, title: "В Краснодаре пройдёт фестиваль уличной музыки", body: "Фестиваль уличной музыки пройдёт в парке Краснодар в эти выходные, вход свободный."}]}
+  - {key: krd-school, gold: {place: Krasnodar, cc: RU, category: society}, reports: [{id: krd-3, source: demo-krasnodar-24, at: -520, title: "Новая школа на 1550 мест открылась в Краснодаре", body: "В микрорайоне Губернском в Краснодаре открыли школу на 1550 учеников."}]}
+  - {key: krd-closure, gold: {place: Krasnodar, cc: RU, category: transport}, reports: [{id: krd-4, source: demo-tg-kuban-live, at: -480, title: "В Краснодаре перекроют улицу Красную", body: "В выходные улицу Красную в Краснодаре перекроют для автомобилей из-за городского праздника."}]}
+  - {key: krd-match, gold: {place: Krasnodar, cc: RU, category: sport}, reports: [{id: krd-5, source: demo-kuban-news, at: -450, title: "ФК «Краснодар» обыграл «Ростов» со счётом 2:0", body: "Матч прошёл при полных трибунах, оба гола забиты во втором тайме."}]}
+  - {key: krd-it, gold: {place: Krasnodar, cc: RU, category: technology}, reports: [{id: krd-6, source: demo-krasnodar-24, at: -420, title: "В Краснодаре появится IT-парк", body: "Технологический парк для IT-компаний построят на окраине Краснодара к 2028 году."}]}
+  - {key: krd-prices, gold: {place: Krasnodar, cc: RU, category: economy}, reports: [{id: krd-7, source: demo-ria-federal, at: -400, title: "Цены на овощи в Краснодаре снизились", body: "Стоимость огурцов и помидоров на рынках Краснодара снизилась на 15 процентов за неделю."}]}
+
+  # ---------------------------------------------------------------- live releases (appear during the demo, no reload)
+  - key: novotitarovskaya-crash
+    gold: {place: Novotitarovskaya, cc: RU, category: incidents}
+    reports:
+      - {id: nov-1, source: demo-tg-dinskaya, at: 3, release: live, title: "ДТП на въезде в Новотитаровскую", body: "На въезде в станицу Новотитаровскую столкнулись легковушка и грузовик, есть пострадавший."}
+      - {id: nov-2, source: demo-kuban-news, at: 6, release: live, title: "В станице Новотитаровской столкнулись легковой автомобиль и грузовик", body: "Авария произошла на въезде в станицу Новотитаровскую Динского района, водитель легковушки госпитализирован."}
+  - key: starokorsunskaya-gas
+    gold: {place: Starokorsunskaya, cc: RU, category: incidents}
+    reports:
+      - {id: sko-1, source: demo-tg-kuban-live, at: 8, release: live, title: "Утечка газа в Старокорсунской", body: "В станице Старокорсунской из-за утечки газа эвакуировали жильцов двух домов."}

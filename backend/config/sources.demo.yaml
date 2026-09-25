@@ -1,0 +1,61 @@
+# DEMO source registry — points at devstand (synthetic data, clearly labeled in the UI).
+# Real sources live in sources.example.yaml and are enabled once the environment has network access.
+x-demo: &demo {synthetic: true, poll_interval: 20, legal_note: "Synthetic test data served by devstand"}
+x-base: &base "http://127.0.0.1:8090"
+
+sources:
+  - {<<: *demo, slug: demo-kuban-news, name: "Демо: Кубань Новости", type: regional_media, connector: rss, access_model: public_feed,
+     url: "http://127.0.0.1:8090/rss/demo-kuban-news.xml", languages: [ru], country: RU, home: {q: "Краснодарский край", cc: RU, kind: admin1}}
+  - {<<: *demo, slug: demo-krasnodar-24, name: "Демо: Краснодар 24", type: local_media, connector: rss, access_model: public_feed,
+     url: "http://127.0.0.1:8090/rss/demo-krasnodar-24.xml", languages: [ru], country: RU, timezone: Europe/Moscow,
+     home: {q: "Краснодар", cc: RU, kind: locality}}
+  - {<<: *demo, slug: demo-tg-dinskaya, name: "Демо: Динская онлайн (Telegram)", type: telegram, connector: telegram_public,
+     access_model: public_web, url: "http://127.0.0.1:8090/tg/s/demo-tg-dinskaya", languages: [ru], country: RU,
+     home: {q: "Динская", cc: RU, kind: locality}}
+  - {<<: *demo, slug: demo-tg-kuban-live, name: "Демо: Кубань Live (Telegram)", type: telegram, connector: telegram_public,
+     access_model: public_web, url: "http://127.0.0.1:8090/tg/s/demo-tg-kuban-live", languages: [ru], country: RU,
+     home: {q: "Краснодарский край", cc: RU, kind: admin1}}
+  - {<<: *demo, slug: demo-tg-primorye, name: "Демо: Приморье сегодня (Telegram)", type: telegram, connector: telegram_public,
+     access_model: public_web, url: "http://127.0.0.1:8090/tg/s/demo-tg-primorye", languages: [ru], country: RU,
+     home: {q: "Primorye", cc: RU, kind: admin1}}
+  - {<<: *demo, slug: demo-kyiv-live, name: "Демо: Київ Live (Telegram)", type: telegram, connector: telegram_public,
+     access_model: public_web, url: "http://127.0.0.1:8090/tg/s/demo-kyiv-live", languages: [uk], country: UA,
+     home: {q: "Kyiv", cc: UA, kind: locality}}
+  - {<<: *demo, slug: demo-mchs-kuban, name: "Демо: ГУ МЧС по краю (офиц. сайт)", type: official, connector: html_list,
+     access_model: public_web, url: "http://127.0.0.1:8090/site/demo-mchs-kuban/", languages: [ru], country: RU,
+     timezone: Europe/Moscow, home: {q: "Краснодарский край", cc: RU, kind: admin1},
+     config: {item_xpath: "//a[@class='news-link']/@href", max_new: 20}}
+  - {<<: *demo, slug: demo-adm-gk, name: "Демо: Администрация Горячего Ключа", type: official, connector: rss,
+     access_model: public_feed, url: "http://127.0.0.1:8090/rss/demo-adm-gk.xml", languages: [ru], country: RU,
+     home: {q: "Горячий Ключ", cc: RU, kind: locality}}
+  - {<<: *demo, slug: demo-yt-kuban-tv, name: "Демо: Кубань ТВ (YouTube)", type: youtube, connector: youtube_rss,
+     access_model: public_feed, url: "http://127.0.0.1:8090/yt/feeds/videos.xml?channel_id=demo-yt-kuban-tv",
+     languages: [ru], country: RU, home: {q: "Краснодарский край", cc: RU, kind: admin1}}
+  - {<<: *demo, slug: demo-sochi-blog, name: "Демо: Блог «Сочи изнутри»", type: blog, connector: rss, access_model: public_feed,
+     url: "http://127.0.0.1:8090/rss/demo-sochi-blog.xml", languages: [ru], country: RU, home: {q: "Сочи", cc: RU, kind: locality}}
+  - {<<: *demo, slug: demo-ria-federal, name: "Демо: Федеральное агентство", type: media, connector: rss, access_model: public_feed,
+     url: "http://127.0.0.1:8090/rss/demo-ria-federal.xml", languages: [ru], country: RU, home: {q: "Россия", cc: RU, kind: country}}
+  - {<<: *demo, slug: demo-rlp-lokal, name: "Demo: RLP Lokal", type: local_media, connector: rss, access_model: public_feed,
+     url: "http://127.0.0.1:8090/atom/demo-rlp-lokal.xml", languages: [de], country: DE,
+     home: {q: "Rheinland-Pfalz", cc: DE, kind: admin1}}
+  - {<<: *demo, slug: demo-dw-de, name: "Demo: Deutsche Nachrichten", type: media, connector: rss, access_model: public_feed,
+     url: "http://127.0.0.1:8090/atom/demo-dw-de.xml", languages: [de], country: DE, home: {q: "Germany", cc: DE, kind: country}}
+  - {<<: *demo, slug: demo-world-en, name: "Demo: World News EN", type: media, connector: rss, access_model: public_feed,
+     url: "http://127.0.0.1:8090/rss/demo-world-en.xml", languages: [en], country: GB}
+  - {<<: *demo, slug: demo-idaho-local, name: "Demo: Palouse Local (Idaho)", type: local_media, connector: rss,
+     access_model: public_feed, url: "http://127.0.0.1:8090/rss/demo-idaho-local.xml", languages: [en], country: US,
+     home: {q: "Idaho", cc: US, kind: admin1}}
+  - {<<: *demo, slug: demo-lyon-info, name: "Démo : Lyon Info", type: local_media, connector: rss, access_model: public_feed,
+     url: "http://127.0.0.1:8090/rss/demo-lyon-info.xml", languages: [fr], country: FR, home: {q: "Lyon", cc: FR, kind: locality}}
+  - {<<: *demo, slug: demo-toledo-hoy, name: "Demo: Toledo Hoy", type: local_media, connector: rss, access_model: public_feed,
+     url: "http://127.0.0.1:8090/rss/demo-toledo-hoy.xml", languages: [es], country: ES,
+     home: {q: "Castille-La Mancha", cc: ES, kind: admin1}}
+  - {<<: *demo, slug: demo-lecco-notizie, name: "Demo: Lecco Notizie", type: local_media, connector: rss, access_model: public_feed,
+     url: "http://127.0.0.1:8090/rss/demo-lecco-notizie.xml", languages: [it], country: IT,
+     home: {q: "Lombardy", cc: IT, kind: admin1}}
+  - {<<: *demo, slug: demo-gdelt, name: "Demo: GDELT-формат агрегатор", type: aggregator, connector: gdelt, access_model: official_api,
+     url: "http://127.0.0.1:8090/gdelt/api/v2/doc/doc", languages: [en], config: {query: "demo"}}
+  - {<<: *demo, slug: demo-flaky, name: "Демо: Нестабильный сайт", type: local_media, connector: rss, access_model: public_feed,
+     url: "http://127.0.0.1:8090/rss/demo-flaky.xml", languages: [ru], country: RU, home: {q: "Краснодарский край", cc: RU, kind: admin1}}
+  - {<<: *demo, slug: demo-broken-xml, name: "Демо: Сломанный фид", type: local_media, connector: rss, access_model: public_feed,
+     url: "http://127.0.0.1:8090/rss/demo-broken-xml.xml", languages: [ru], country: RU}

@@ -15,7 +15,8 @@ from geonews.pipeline.trust import Report, trust_label
 
 RANK = {"point": 0, "street": 1, "sublocality": 2, "locality": 3, "area": 4, "admin5": 5, "admin4": 6, "admin3": 7,
         "admin2": 8, "admin1": 9, "country": 10, "continent": 11}
-LOW_ACCOUNTABILITY = {"ugc", "telegram", "blog"}
+TITLE_RANK = {"regional_media": 0, "local_media": 0, "media": 0, "tv": 1, "official": 1, "youtube": 2,
+              "organization": 2, "aggregator": 2, "telegram": 3, "blog": 3, "ugc": 4}
 
 
 @dataclass
@@ -84,8 +85,9 @@ def consensus_location(members: list[dict], anc: dict[int, tuple[int, ...]]) -> 
 
 def build_event(members: list[dict], anc: dict[int, tuple[int, ...]]) -> dict:
     assert members, "event without articles"
-    rep = min(members, key=lambda m: (m["duplicate_of"] is not None, m["source_type"] in LOW_ACCOUNTABILITY,
-                                      m["trust_tier"], m["published_at"], m["id"]))
+    # headline from an editorial report (clear, neutral wording); officials are shown via the trust label
+    rep = min(members, key=lambda m: (m["duplicate_of"] is not None, TITLE_RANK.get(m["source_type"], 3),
+                                      m["published_at"], m["id"]))
     loc, outliers = consensus_location(members, anc)
     cats = Counter(m["category"] for m in members if m["category"] not in (None, "other", "official"))
     category = cats.most_common(1)[0][0] if cats else (members[0]["category"] or "other")
@@ -95,6 +97,7 @@ def build_event(members: list[dict], anc: dict[int, tuple[int, ...]]) -> dict:
     for m in members:
         terms.update((m.get("cluster_features") or {}).get("terms") or {})
     nums = sorted({n for m in members for n in ((m.get("cluster_features") or {}).get("numbers") or [])})[:30]
+    names = sorted({n for m in members for n in ((m.get("cluster_features") or {}).get("names") or [])})[:60]
     tr = trust_label([Report(m["source_id"], m["source_type"], m["trust_tier"], m["origin_group_id"]) for m in members])
     event_times = [m["event_time"] for m in members if m["event_time"]]
     return {
@@ -121,5 +124,5 @@ def build_event(members: list[dict], anc: dict[int, tuple[int, ...]]) -> dict:
         "has_official": tr["has_official"],
         "trust_label": tr["label"],
         "synthetic": any(m["synthetic"] for m in members),
-        "terms": {"terms": dict(terms.most_common(120)), "numbers": nums, "outliers": outliers},
+        "terms": {"terms": dict(terms.most_common(120)), "numbers": nums, "names": names, "outliers": outliers},
     }

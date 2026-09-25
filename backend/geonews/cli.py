@@ -17,6 +17,7 @@ def main(argv: list[str] | None = None) -> None:
     s = sub.add_parser("load-sources", help="load/refresh source registry from a YAML file")
     s.add_argument("file", nargs="?", default=None)
     sub.add_parser("load-categories", help="load/refresh categories from config/categories.yaml")
+    sub.add_parser("reset-news", help="DANGER: delete all ingested news/events/jobs (keeps gazetteer & sources)")
     w = sub.add_parser("worker", help="run a background worker")
     w.add_argument("kind", choices=["ingest", "process", "maintenance", "all"])
     w.add_argument("--once", action="store_true", help="drain available work and exit")
@@ -48,6 +49,16 @@ def main(argv: list[str] | None = None) -> None:
         from geonews.pipeline.classify import load_categories_into_db
 
         print("categories:", load_categories_into_db())
+    elif args.cmd == "reset-news":
+        from geonews.db.pool import connect
+
+        with connect() as conn:
+            conn.execute("TRUNCATE event_change_log, event_relation, event_article, event, article_location, "
+                         "article_analysis, article_version, article, raw_item, job RESTART IDENTITY CASCADE")
+            conn.execute("UPDATE source SET next_poll_at = now(), consecutive_failures = 0, last_error = NULL, "
+                         "http_etag = NULL, http_last_modified = NULL")
+            conn.commit()
+        print("news data reset")
     elif args.cmd == "worker":
         from geonews.workers.run import run_worker
 

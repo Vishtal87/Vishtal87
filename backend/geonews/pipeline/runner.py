@@ -22,10 +22,25 @@ from geonews.ingestion.entry import RawEntry
 from geonews.pipeline import classify, clustering, dates, dedup, event_builder, language, normalize
 from geonews.pipeline.geoparse.model import GeoResult, SourceContext
 from geonews.pipeline.geoparse.resolver import geoparse
+from geonews.domain.text_norm import tokenize
 
 log = logging.getLogger(__name__)
 METHOD = "rules-v1"
 MIN_MAP_CONFIDENCE = 0.2   # below this a location is kept as analysis but not used to place events
+MAX_MAP_AMBIGUITY = 0.45   # "Ивановка" with several equally plausible readings stays off the map
+
+
+def _mention_words(geo: GeoResult) -> set[str]:
+    """Words naming the MAIN place: sharing the city name says nothing about being the same event.
+    Secondary places (a district, a street) stay: they are strong same-event evidence, even across languages."""
+    return {t.norm for m in geo.mentions if m.role == "primary" or (geo.primary and m.chosen.id == geo.primary.entity_id)
+            for t in tokenize(m.text)}
+
+
+def _recurring(other: dict, a: dict) -> bool:
+    """Same source posting the same/similar text on another day (daily forecast, greeting): not a duplicate."""
+    return other["source_id"] == a["source_id"] and \
+        abs((other["published_at"] - a["published_at"]).total_seconds()) > 18 * 3600
 
 
 class Processor:
@@ -117,8 +132,8 @@ class Processor:
             article_id = news_repo.insert_article(conn, a)
             op = "created"
 
-        terms, nums = clustering.salient_terms(title, body, lang)
-        self._write_analysis(article_id, lang, lang_conf, published, tz_assumed, tz, et, live, geo, cls, terms, nums)
+        terms, nums, names = clustering.salient_terms(title, body, lang, exclude=_mention_words(geo))
+        self._write_analysis(article_id, lang, lang_conf, published, tz_assumed, tz, et, live, geo, cls, terms, nums, names)
 
         # DEDUPLICATION (exact, then near-duplicate via SimHash bands)
         dup_of, origin = self._dedup(article_id, a, title, body)
@@ -126,7 +141,7 @@ class Processor:
         news_repo.add_analysis(conn, article_id, "dedup", METHOD, {"duplicate_of": dup_of, "origin_group_id": origin})
 
         # EVENT CLUSTERING
-        event_id, sim, details = self._cluster(article_id, a, geo, cls, terms, nums, dup_of, lang, old_event)
+        event_id, sim, details = self._cluster(article_id, a, geo, cls, terms, nums, names, dup_of, lang, old_event)
         news_repo.add_analysis(conn, article_id, "cluster", METHOD, {"event_id": event_id, "similarity": sim, **details})
         changed = []
         if event_id:
@@ -141,7 +156,7 @@ class Processor:
                 "location": geo.primary.entity_id if geo.primary else None}
 
     def _write_analysis(self, article_id, lang, lang_conf, published, tz_assumed, tz, et, live, geo: GeoResult, cls,
-                        terms, nums) -> None:
+                        terms, nums, names) -> None:
         conn = self.conn
         news_repo.add_analysis(conn, article_id, "language", "lingua", {"lang": lang, "confidence": round(lang_conf, 3)})
         news_repo.add_analysis(conn, article_id, "dates", METHOD, {
@@ -160,7 +175,8 @@ class Processor:
         news_repo.add_analysis(conn, article_id, "category", METHOD,
                                {"category": cls.category, "event_type": cls.event_type, "scores": cls.scores})
         news_repo.add_analysis(conn, article_id, "features", METHOD,
-                               {"terms": dict(terms), "numbers": sorted(nums)[:30], "event_type": cls.event_type})
+                               {"terms": dict(terms), "numbers": sorted(nums)[:30], "names": sorted(names)[:30],
+                                "event_type": cls.event_type})
         rows = []
         if p:
             rows.append({"geo_entity_id": p.entity_id, "role": "source_area" if p.relation == "source_area" else "primary",
@@ -179,24 +195,33 @@ class Processor:
     def _dedup(self, article_id: int, a: dict, title: str, body: str) -> tuple[int | None, int]:
         since = a["published_at"] - timedelta(days=14)
         ex = news_repo.exact_duplicate(self.conn, a["content_hash"], a["canonical_url"], article_id, since)
-        if ex:
+        if ex and not _recurring(ex, a):
             return ex["id"], ex["origin_group_id"] or ex["id"]
         cands = news_repo.simhash_candidates(self.conn, (a["sh_b0"], a["sh_b1"], a["sh_b2"], a["sh_b3"]),
                                              a["published_at"] - timedelta(days=7), article_id)
+        # short posts (Telegram) make SimHash noisy: identical first lines are a second candidate channel
+        cands += news_repo.same_title_candidates(self.conn, title, a["published_at"] - timedelta(days=3), article_id)
         mine = dedup.shingles(f"{title} {body}")
         best = None
+        seen: set[int] = set()
         for c in cands:
-            if dedup.hamming(c["simhash"], a["simhash"]) > dedup.HAMMING_MAX:
+            if c["id"] in seen or _recurring(c, a):
                 continue
+            seen.add(c["id"])
             j = dedup.jaccard(mine, dedup.shingles(f"{c['title']} {c['text']}"))
             if j >= dedup.JACCARD_DUP and (best is None or j > best[1]):
                 best = (c, j)
         if best:
             c = best[0]
-            return c["id"], c["origin_group_id"] or c["id"]
+            origin = c["origin_group_id"] or c["id"]
+            if c["published_at"] > a["published_at"]:
+                # processed out of order: the candidate is the copy, this article is the original
+                news_repo.set_origin(self.conn, c["id"], origin, article_id)
+                return None, origin
+            return c["id"], origin
         return None, article_id
 
-    def _cluster(self, article_id, a, geo: GeoResult, cls, terms, nums, dup_of, lang, old_event):
+    def _cluster(self, article_id, a, geo: GeoResult, cls, terms, nums, names, dup_of, lang, old_event):
         conn = self.conn
         p = geo.primary
         if dup_of:
@@ -204,17 +229,20 @@ class Processor:
             if ev:
                 news_repo.attach(conn, ev, article_id, 1.0)
                 return ev, 1.0, {"reason": "duplicate_of_member"}
-        if p is None or p.confidence < MIN_MAP_CONFIDENCE:
+        if p is None or p.confidence < MIN_MAP_CONFIDENCE or p.ambiguity > MAX_MAP_AMBIGUITY:
             if old_event:
                 news_repo.detach(conn, article_id)
-            return None, 0.0, {"reason": "unlocated" if p is None else "low_location_confidence"}
+            reason = "unlocated" if p is None else ("ambiguous_place" if p.ambiguity > MAX_MAP_AMBIGUITY
+                                                    else "low_location_confidence")
+            return None, 0.0, {"reason": reason}
         place = self.gaz.parents_of([p.entity_id]).get(p.entity_id) if p.entity_id else None
         feats = clustering.Features(
             at=a["event_time"] or a["published_at"], category=cls.category, event_type=cls.event_type,
             locality_id=place.locality_id if place else None, admin2_id=place.admin2_id if place else None,
             admin1_id=place.admin1_id if place else None, country_id=place.country_id if place else None,
             lat=p.lat, lon=p.lon, radius_km=p.radius_km, precision=p.precision,
-            place_population=place.population if place else 0, lang=lang, terms=terms, numbers=set(nums))
+            place_population=place.population if place else 0, lang=lang, terms=terms, numbers=set(nums),
+            names=set(names))
         # serialize clustering per area: two workers must not create twin events for one fire
         lock_key = feats.admin1_id or feats.country_id or 0
         conn.execute("SELECT pg_advisory_xact_lock(%s)", (zlib.crc32(f"cluster:{lock_key}".encode()),))
@@ -227,7 +255,9 @@ class Processor:
                 country_id=ev["country_id"], lat=ev["lat"], lon=ev["lon"],
                 radius_km=(ev["radius_m"] or 0) / 1000 or None, precision=ev["location_precision"],
                 place_population=ev["place_population"], lang=ev["lang"], terms=Counter(t.get("terms") or {}),
-                numbers=set(t.get("numbers") or []))
+                numbers=set(t.get("numbers") or []), names=set(t.get("names") or []))
+            if ev["member_sources"] == [a["source_id"]] and abs((ev["last_article_at"] - a["published_at"]).total_seconds()) > 18 * 3600:
+                continue  # a source's recurring series (daily forecast, weekly digest) is not one event
             s, d = clustering.match_score(feats, ef)
             # the event may have started before; also compare with its latest activity
             if s < clustering.MATCH_THRESHOLD and ev["last_article_at"] != ef.at:

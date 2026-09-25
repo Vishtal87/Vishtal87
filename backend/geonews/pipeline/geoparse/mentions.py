@@ -46,8 +46,8 @@ _DIR_RE = re.compile(r"(?:к|на)\s+(север\w*|юг\w*|запад\w*|вос
                      r"\b(nördlich|südlich|westlich|östlich)\s+(?:von\s*)?$", re.IGNORECASE)
 _ROUTE_RE = re.compile(r"(трасс\w*|автодорог\w*|дорог\w*|шоссе|рейс\w*|маршрут\w*|highway|motorway|route|autobahn|"
                        r"между|between|zwischen)\s*[^.]{0,40}$", re.IGNORECASE)
-_AREA_RE = re.compile(r"(в районе|в окрестностях|в пригороде|на окраине|in the area of|in the vicinity of|outside of|"
-                      r"on the outskirts of|in der nähe von|aux environs de|près de|cerca de|nei pressi di)\s*(\w+\s+)?$",
+_AREA_RE = re.compile(r"(в районе|в окрестностях|в пригороде|in the area of|in the vicinity of|outside of|"
+                      r"in der nähe von|aux environs de|près de|cerca de|nei pressi di)\s*(\w+\s+)?$",
                       re.IGNORECASE)
 
 
@@ -222,6 +222,17 @@ def _cues(text: str, toks: list[Token], i: int, j: int, lang: str | None, first_
     if _ROUTE_RE.search(window) or re.match(r"\s*[—–-]\s*[A-ZА-ЯЁ]", text[toks[j].end:toks[j].end + 4]):
         c.route = True
 
+    # Russian streets are often named without the word "улица": "на Уральской", "по Красной";
+    # and listed after one type word: "на улицах Мира, Советской и Кирова"
+    if not c.street and lang in ("ru", "uk") and i == j:
+        if prev and prev[-1].norm in ("на", "по", "с") and _is_fem_adjective(t0.norm, lang) and c.type_kind is None:
+            c.street = True
+        clause = text[max(0, t0.start - 80):t0.start]
+        m_list = re.search(r"(улиц\w*|ул\.|проспект\w*|переулк\w*|пер\.|бульвар\w*|вулиц\w*)\s+"
+                           r"(?:[А-ЯЁІЇЄҐ][\w-]*\s*(?:,|и|та)\s*)+$", clause)
+        if m_list:
+            c.street = True
+
     # «Краснодар», „Kuban“: quoted names are clubs, companies, ships, stations — not the place itself
     before, after = text[max(0, t0.start - 1):t0.start], text[toks[j].end:toks[j].end + 1]
     if before in ("«", "„", "\"", "“") and after in ("»", "“", "\"", "”"):
@@ -231,6 +242,18 @@ def _cues(text: str, toks: list[Token], i: int, j: int, lang: str | None, first_
     if i == j and lang and c.type_kind is None:
         c.common_word = word_is_common_noun(t0.norm, lang)
     return c
+
+
+def _is_fem_adjective(word: str, lang: str) -> bool:
+    """'уральской', 'красной': feminine adjective in an oblique case (street name with 'улица' omitted)."""
+    from geonews.domain.text_norm import _analyzer
+
+    parses = _analyzer(lang).parse(word)
+    if not parses:
+        return False
+    p = parses[0]
+    g = set(p.tag.grammemes)
+    return "ADJF" in g and "femn" in g and bool({"loct", "datv", "gent", "ablt"} & g) and "Geox" not in g
 
 
 def _adjacent(text: str, a: Token, b: Token) -> bool:

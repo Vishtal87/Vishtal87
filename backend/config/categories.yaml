@@ -106,12 +106,14 @@ categories:
     icon: users
     sort: 80
     keywords:
-      ru: [жител, школ, детск сад, больниц, поликлиник, врач, образован, благоустро, двор, парк, волонтер, праздник, день сел, день город, ветеран, жкх, мусор, вод]
+      ru: [жител, школ, детск сад, больниц, поликлиник, врач, образован, благоустро, двор, парк, волонтер, праздник, день сел, день город, ветеран, жкх, мусор, вод, отключ, водоснабжен, электроснабжен]
       uk: [мешканц, школ, лікарн, лікар, освіт, парк, волонтер, свято]
       en: [residents, school, hospital, clinic, doctor, education, park, volunteer, community, festival, housing]
       de: [bürger, einwohner, schule, kita, krankenhaus, arzt, park, ehrenamt, fest, wohnung]
       fr: [habitants, ecole, hopital, medecin, education, parc, benevole, fete, logement]
       es: [vecinos, escuela, hospital, medico, educacion, parque, voluntario, fiesta, vivienda]
+    types:
+      utility_outage: [отключ, водоснабжен, электроснабжен, газоснабжен, без воды, без света, відключ, outage, stromausfall, wasserausfall, coupure, corte de agua, apagon]
   - slug: culture
     names: {ru: Культура, en: Culture, de: Kultur, fr: Culture, es: Cultura, uk: Культура, zh: 文化}
     color: "#FF9F1C"

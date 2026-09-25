@@ -130,11 +130,11 @@ def test_region_report_plus_village_report_resolves_to_village():
     assert loc.entity_id == 5
 
 
-def test_event_title_prefers_accountable_source_and_counts():
+def test_event_title_prefers_editorial_source_official_shown_by_label():
     members = [_m(1, 5, 45.2, 39.2, stype="telegram"), _m(2, 5, 45.2, 39.2, stype="media"),
                _m(3, 5, 45.2, 39.2, stype="official", trust_tier=1)]
     ev = build_event(members, {5: (100, 10)})
-    assert ev["title"] == "t3" and ev["trust_label"] == "official" and ev["article_count"] == 3
+    assert ev["title"] == "t2" and ev["trust_label"] == "official" and ev["article_count"] == 3
 
 
 # ---------------------------------------------------------------- classification

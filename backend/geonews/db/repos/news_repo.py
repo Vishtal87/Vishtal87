@@ -89,7 +89,7 @@ def replace_locations(conn: psycopg.Connection, article_id: int, rows: list[dict
 def exact_duplicate(conn: psycopg.Connection, content_hash: str, canon: str | None, exclude_id: int,
                     since: datetime) -> dict | None:
     return conn.execute(
-        """SELECT id, source_id, origin_group_id FROM article
+        """SELECT id, source_id, origin_group_id, published_at FROM article
            WHERE id <> %(ex)s AND published_at >= %(since)s AND (content_hash = %(h)s OR (%(c)s::text IS NOT NULL
                  AND canonical_url = %(c)s))
            ORDER BY published_at, id LIMIT 1""",
@@ -108,6 +108,14 @@ def simhash_candidates(conn: psycopg.Connection, b: tuple[int, int, int, int], s
     ).fetchall()
 
 
+def same_title_candidates(conn: psycopg.Connection, title: str, since: datetime, exclude_id: int) -> list[dict]:
+    return conn.execute(
+        """SELECT id, source_id, title, text, simhash, origin_group_id, published_at FROM article
+           WHERE md5(lower(title)) = md5(lower(%s)) AND id <> %s AND published_at >= %s LIMIT 20""",
+        (title, exclude_id, since),
+    ).fetchall()
+
+
 # ---------------------------------------------------------------- events
 EVENT_COLS = """ev.id, ev.title, ev.category, ev.event_type, ev.lang, ev.first_seen_at, ev.last_article_at,
     ev.event_time, ev.geo_entity_id, ev.location_precision, ev.radius_m, ST_Y(ev.geom) AS lat, ST_X(ev.geom) AS lon,
@@ -117,7 +125,9 @@ EVENT_COLS = """ev.id, ev.title, ev.category, ev.event_type, ev.lang, ev.first_s
 def candidate_events(conn: psycopg.Connection, at: datetime, locality_id: int | None, admin1_id: int | None,
                      lat: float | None, lon: float | None, limit: int = 60) -> list[dict]:
     return conn.execute(
-        f"""SELECT {EVENT_COLS}, coalesce(ge.population, 0) AS place_population
+        f"""SELECT {EVENT_COLS}, coalesce(ge.population, 0) AS place_population,
+                   (SELECT array_agg(DISTINCT a.source_id) FROM event_article ea JOIN article a ON a.id = ea.article_id
+                     WHERE ea.event_id = ev.id) AS member_sources
             FROM event ev LEFT JOIN geo_entity ge ON ge.id = ev.geo_entity_id
             WHERE ev.status = 'active'
               AND ev.last_article_at >= %(at)s - interval '72 hours'

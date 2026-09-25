@@ -61,6 +61,7 @@ class Mention:
     confidence: float = 0.0
     role: str = "mentioned"            # primary | secondary | near | mentioned | street | org | route
     appos: set[int] = field(default_factory=set)   # "Springfield, Illinois": ids of the admin areas named right after
+    p_best: float = 0.0                # probability mass of the chosen reading among rival readings (ambiguity)
 
 
 @dataclass(slots=True)
@@ -92,6 +93,7 @@ class LocationDecision:
     confidence: float
     radius_km: float | None = None
     anchor_id: int | None = None   # reference place for "near" relations
+    ambiguity: float = 0.0         # 1 - p(best reading): high for "Ивановка" with no context
     evidence: dict = field(default_factory=dict)
 
 
