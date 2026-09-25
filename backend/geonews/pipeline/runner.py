@@ -68,11 +68,12 @@ class Processor:
             ctx = SourceContext(country_code=raw["country_code"])
             if raw["home_geo_entity_id"]:
                 e = self.conn.execute(
-                    "SELECT id, kind, ancestors, ST_Y(geom) lat, ST_X(geom) lon FROM geo_entity WHERE id = %s",
+                    "SELECT id, kind, ancestors, population, ST_Y(geom) lat, ST_X(geom) lon FROM geo_entity WHERE id = %s",
                     (raw["home_geo_entity_id"],)).fetchone()
                 if e:
                     ctx = SourceContext(home_id=e["id"], home_kind=e["kind"], home_ancestors=tuple(e["ancestors"]),
-                                        home_lat=e["lat"], home_lon=e["lon"], country_code=raw["country_code"])
+                                        home_lat=e["lat"], home_lon=e["lon"], home_population=e["population"] or 0,
+                                        country_code=raw["country_code"])
             self._src_ctx[sid] = ctx
         return self._src_ctx[sid]
 

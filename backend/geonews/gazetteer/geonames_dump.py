@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import csv
 import logging
+import re
 from collections import defaultdict
 from pathlib import Path
 from typing import Iterator
@@ -23,6 +24,12 @@ from geonews.gazetteer.records import NameRec, PlaceRec, guess_lang, keep_alt_na
 log = logging.getLogger(__name__)
 csv.field_size_limit(10_000_000)
 DISPLAY_LANGS = {"ru", "en", "de", "fr", "es", "uk", "zh", "it", "pl", "pt", "tr", "be", "kk"}
+_GENERIC_TITLE = re.compile(r"(?<=\S )(Область|Край|Район|Округ|Автономный|Автономная)\b")
+
+
+def display_case(name: str, lang: str | None) -> str:
+    """GeoNames has 'Псковская Область': Russian writes the generic part of a region name in lower case."""
+    return _GENERIC_TITLE.sub(lambda m: m.group(1).lower(), name) if lang in ("ru", "uk", "be") else name
 
 
 def _rows(path: Path) -> Iterator[list[str]]:
@@ -98,7 +105,7 @@ def iter_records(dump_dir: Path, main_file: str, alt_file: str | None = None) ->
             alt_names.append(NameRec(name, lang, pref, coll, hist))
             if lang in DISPLAY_LANGS and not hist and not coll:
                 if pref or (lang not in names and lang != "en"):
-                    names[lang] = name
+                    names[lang] = display_case(name, lang)
         if not tagged:  # no language-tagged file: fall back to the untagged list in the main row
             for name in r[3].split(","):
                 if keep_alt_name(name):

@@ -6,7 +6,8 @@ import re
 from geonews.domain.settlement_lexicon import (
     ABBREVIATIONS_NEED_DOT, DIRECTION_WORDS, DISTANCE_UNITS, NEAR_CUES, ORG_CUES, POSTPOSITIVE_OK, TYPE_WORDS,
 )
-from geonews.domain.text_norm import Token, ngram_keys, script_of, token_lemmas, tokenize, word_is_common_noun
+from geonews.domain.text_norm import (Token, ngram_keys, script_of, token_lemmas, tokenize, word_is_common_noun,
+                                      word_is_person_name)
 from geonews.pipeline.geoparse.model import Cues, Mention
 
 MAX_NGRAM = 4
@@ -31,6 +32,7 @@ montag dienstag mittwoch donnerstag freitag samstag sonntag
 police president minister government army mayor governor
 """.split())
 LOCATIVE_PREPS = set("в во на у под около возле близ in at near bei im am um à a au aux en em no na nel nella w we".split())
+STRICT_LOCATIVE_PREPS = {"в", "во", "под", "около", "возле", "близ"}   # "у Путина", "на Путина" are about a person
 NAME_CONNECTORS = {"на", "де", "ла", "ле", "de", "la", "le", "du", "des", "am", "an", "im", "upon", "on", "del", "di",
                    "sur", "en", "-"}
 
@@ -177,6 +179,7 @@ def _cues(text: str, toks: list[Token], i: int, j: int, lang: str | None, first_
             c.org = True
         if p.norm in LOCATIVE_PREPS or (len(prev) >= 2 and prev[-2].norm in LOCATIVE_PREPS and c.type_kind):
             c.locative = True
+        c.strict_locative = p.norm in STRICT_LOCATIVE_PREPS
         # "Джордж Вашингтон", "Иван Краснодаров": capitalized word right before, same sentence, not a type word
         if (p.capitalized and not tw and p.norm not in STOPWORDS and i - 1 not in first_of_sentence
                 and _adjacent(text, p, t0) and p.norm not in NAME_CONNECTORS):
@@ -241,6 +244,7 @@ def _cues(text: str, toks: list[Token], i: int, j: int, lang: str | None, first_
     # common word check (ru/uk dictionary) for single-token spans without a type cue
     if i == j and lang and c.type_kind is None:
         c.common_word = word_is_common_noun(t0.norm, lang)
+        c.person_like = word_is_person_name(t0.norm, lang)
     return c
 
 

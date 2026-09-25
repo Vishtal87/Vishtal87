@@ -5,6 +5,9 @@ from dataclasses import dataclass, field
 from typing import Protocol, Sequence
 
 
+HYPERLOCAL_MAX_POPULATION = 100_000
+
+
 @dataclass(slots=True)
 class Candidate:
     """A gazetteer entity that a text span may refer to."""
@@ -44,6 +47,8 @@ class Cues:
     in_title: bool = False
     name_like: bool = False            # "Paris Hilton", "Джордж Вашингтон"
     common_word: bool = False          # dictionary says it's an ordinary word ('Мир', 'Заря')
+    person_like: bool = False          # reads as a surname / first name, never as a place ('Путина', 'Дмитриев')
+    strict_locative: bool = False      # "в X", "под X": unlike "у X" / "на X" never used with a person
 
 
 @dataclass(slots=True)
@@ -72,6 +77,7 @@ class SourceContext:
     home_ancestors: tuple[int, ...] = ()
     home_lat: float | None = None
     home_lon: float | None = None
+    home_population: int = 0
     country_code: str | None = None
 
     @property
@@ -80,7 +86,10 @@ class SourceContext:
 
     @property
     def hyperlocal(self) -> bool:
-        return self.home_kind in ("locality", "sublocality", "admin3", "admin4", "admin5")
+        """A village / district / small-town source: a story that names no place is about its own area.
+        Not so for a big city's portal, which also carries national and world news."""
+        return (self.home_kind in ("sublocality", "admin3", "admin4", "admin5")
+                or (self.home_kind == "locality" and self.home_population < HYPERLOCAL_MAX_POPULATION))
 
 
 @dataclass(slots=True)

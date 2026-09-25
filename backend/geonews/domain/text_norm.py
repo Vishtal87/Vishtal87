@@ -160,6 +160,18 @@ def word_is_common_noun(word: str, lang: str = "ru") -> bool:
     return known and geo < 0.3
 
 
+def word_is_person_name(word: str, lang: str = "ru") -> bool:
+    """True if the word reads as a surname / first name / patronymic and never as a place name: 'Путина',
+    'Дмитриев', 'Самойлова'. Many real stanitsa names also read as surnames ('Каневская'), so this is a cue that
+    asks for more evidence, not a verdict."""
+    if lang not in ("ru", "uk") or script_of(word) != "cyrl":
+        return False
+    parses = _analyzer(lang).parse(word)
+    if not parses or any("Geox" in p.tag.grammemes for p in parses):
+        return False
+    return sum(p.score for p in parses if {"Surn", "Name", "Patr"} & set(p.tag.grammemes)) >= 0.2
+
+
 def _part_lemmas(part: str, lang: str) -> tuple[str, ...]:
     if part in _KEEP_PARTS:
         return (part,)

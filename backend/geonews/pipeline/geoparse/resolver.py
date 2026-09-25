@@ -16,6 +16,7 @@ from geonews.pipeline.geoparse.model import (
 )
 
 ACCEPT = 2.2            # minimal score for a span to be treated as a place reference at all
+SMALL_PLACE = 10_000    # below this a bare name needs something tying the text to that place
 SPECIFICITY = {"point": 1.2, "street": 1.1, "sublocality": 1.05, "locality": 1.0, "admin5": 0.8, "admin4": 0.75,
                "admin3": 0.7, "admin2": 0.62, "admin1": 0.5, "country": 0.3, "continent": 0.1}
 _COORD_RE = re.compile(r"(-?\d{1,2}\.\d{3,})\s*[,;\s]\s*(-?\d{1,3}\.\d{3,})")
@@ -172,6 +173,16 @@ def _score(m: Mention, source: SourceContext, ctx: dict | None) -> None:
             if source.home_lat is not None and c.kind in ("locality", "sublocality"):
                 km = haversine_km(source.home_lat, source.home_lon, c.lat, c.lon)
                 s += max(0.0, 2.0 - math.log10(km + 1))
+        # small places named like a person or an ordinary word ('Путина', 'Самойлов', 'Лига' are all villages
+        # somewhere): accepted with a type word, an apposition or the article naming its district/region. A surname
+        # may also come with "в/под X"; the source's own region is not enough ('Зеленский' is a Kuban khutor too)
+        if c.kind in ("locality", "sublocality") and c.population < SMALL_PLACE and not cues.type_kind and not m.appos:
+            in_text_area = bool(ctx) and any(a in ctx["text_areas"] for a in (c.admin2_id, c.admin1_id) if a)
+            in_home = (source.home_kind not in (None, "continent", "country")      # a national outlet covers everything
+                       and any(c.within(a) for a in (source.area_ids - set(source.home_ancestors[:2]))))
+            if (cues.person_like and not (cues.strict_locative or in_text_area)
+                    or cues.common_word and not (in_text_area or in_home)):   # 'в Лиге наций': ordinary word
+                s -= 6.0
         # penalties: evidence that the span is not a place reference
         if cues.common_word and not cues.locative:
             s -= 3.0
