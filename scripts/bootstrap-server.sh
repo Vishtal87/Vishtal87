@@ -111,11 +111,24 @@ fi
 say "Checking news sources (Krasnodar Krai, federal media)"
 scripts/prod.sh verify-sources
 
+# ports 80/443 held by something else (another site, a VPN panel): leave it alone and use 8080/8443
+if ! grep -q '^HTTP_PORT=' .env && ! docker ps --format '{{.Names}}' | grep -q -- '-caddy-1$'; then
+  if ss -Hltn 'sport = :80' | grep -q . || ss -Hltn 'sport = :443' | grep -q .; then
+    say "Ports 80/443 are already used by another service on this server: the site goes to 8080/8443"
+    printf 'HTTP_PORT=8080\nHTTPS_PORT=8443\n' >> .env
+  fi
+fi
+set -a; . ./.env; set +a
+
 say "Starting the site"
 scripts/prod.sh up
 
 say "DONE"
-echo "    Site:           https://$DOMAIN"
-echo "    Also (no TLS):  http://$PUBLIC_IP"
+if [ "${HTTP_PORT:-80}" = 80 ]; then
+  echo "    Site:           https://$DOMAIN"
+  echo "    Also (no TLS):  http://$PUBLIC_IP"
+else
+  echo "    Site:           http://$PUBLIC_IP:$HTTP_PORT   (ports 80/443 are used by another service, so no HTTPS)"
+fi
 echo "    First news appear within ~5 minutes. Manage with: cd $DIR && scripts/prod.sh status|logs|update|backup"
 echo "    Security: change the root password (passwd) or switch to SSH keys."

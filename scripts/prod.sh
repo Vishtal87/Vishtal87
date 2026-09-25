@@ -45,7 +45,12 @@ case "$cmd" in
   status)
     "${DC[@]}" ps
     insecure=(); [ "$DOMAIN" = localhost ] && insecure=(-k)   # local test certificate
-    curl -fsS --max-time 10 "${insecure[@]}" "https://${DOMAIN}/api/health" && echo || echo "https://${DOMAIN} is not answering yet" ;;
+    if [ "${HTTPS_PORT:-443}" = 443 ]; then
+      curl -fsS --max-time 10 "${insecure[@]}" "https://${DOMAIN}/api/health" >/dev/null \
+        && echo "OK  https://${DOMAIN}" || echo "--  https://${DOMAIN} is not answering yet (certificate may take a minute)"
+    fi
+    http="http://${PUBLIC_IP:-127.0.0.1}$([ "${HTTP_PORT:-80}" = 80 ] || echo ":${HTTP_PORT}")"
+    curl -fsS --max-time 10 "$http/api/health" >/dev/null && echo "OK  $http" || echo "--  $http is not answering yet" ;;
   logs)
     "${DC[@]}" logs -f --tail=200 "$@" ;;
   update)
