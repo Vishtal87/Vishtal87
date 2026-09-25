@@ -4,12 +4,20 @@ from datetime import UTC, datetime, timedelta
 
 import httpx
 
+import pytest
+
 from geonews.ingestion.connectors import CONNECTORS
+from geonews.ingestion.connectors import article
 from geonews.ingestion.connectors.article import article_links
 from geonews.ingestion.connectors.rss import parse_feed
 from geonews.ingestion.connectors.sitemap_news import parse_sitemap
 from geonews.ingestion.fetcher import Fetcher
 from geonews.ingestion.verify import check_candidate, verified_entry
+
+@pytest.fixture(autouse=True)
+def _fresh_rejections():
+    article._rejected.clear()
+
 
 PARAGRAPH = ("В станице Динской Краснодарского края в среду вечером загорелся склад на улице Красной. "
              "На место прибыли пять пожарных расчётов, огонь локализовали за два часа, пострадавших нет. ")
@@ -61,6 +69,7 @@ def test_html_list_skips_pages_without_publication_date():
     listing = '<a href="/news/sklad-v-dinskoy">Склад загорелся в станице Динской вечером в среду</a>'
     f, _ = _fetcher({"/": (200, listing), "/news/sklad-v-dinskoy": (200, undated)})
     assert CONNECTORS["html_list"].fetch({"url": "https://news.test/"}, f).entries == []
+    article._rejected.clear()
     kept = CONNECTORS["html_list"].fetch({"url": "https://news.test/", "config": {"allow_undated": True}}, f)
     assert len(kept.entries) == 1
 
@@ -149,3 +158,16 @@ def test_check_sources_keeps_previously_verified_on_temporary_failure(tmp_path, 
     cli.main(["check-sources", str(cand), "--out", str(out), "--keep-previous"])
     kept = {s["slug"]: s for s in yaml.safe_load(out.read_text())["sources"]}
     assert set(kept) == {"up", "down"} and kept["down"]["url"] == "https://b.test/rss"
+
+
+def test_listing_polls_are_polite():
+    links = "".join(f'<a href="/news/section-{i}">Раздел номер {i} с длинным названием для ссылки</a>' for i in range(30))
+    undated = re.sub(r'<meta property="article:published_time"[^>]*>', "", _article("Раздел", NOW))
+    f, hits = _fetcher({"/": (200, links), **{f"/news/section-{i}": (200, undated) for i in range(30)}})
+    src = {"url": "https://news.test/", "config": {"max_new": 3}}
+    assert CONNECTORS["html_list"].fetch(src, f).entries == []
+    first = [h for h in hits if h.startswith("/news/")]
+    assert len(first) == 6                                   # at most 2 x max_new pages per poll
+    CONNECTORS["html_list"].fetch(src, f)
+    second = [h for h in hits if h.startswith("/news/")][len(first):]
+    assert len(second) == 6 and not set(second) & set(first)  # rejected pages are not fetched again

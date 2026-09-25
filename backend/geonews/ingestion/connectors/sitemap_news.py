@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 
 from lxml import etree
 
-from geonews.ingestion.connectors.article import fetch_article
+from geonews.ingestion.connectors.article import collect_articles
 from geonews.ingestion.connectors.base import FetchResult, respects_robots
 from geonews.ingestion.fetcher import FetchError, Fetcher
 from geonews.pipeline.dates import parse_published
@@ -81,15 +81,7 @@ class SitemapNewsConnector:
     def fetch(self, source: dict, fetcher: Fetcher) -> FetchResult:
         cfg = source.get("config") or {}
         robots = respects_robots(source)
-        known = set(source.get("known_ids") or [])
-        out = []
-        for item in fresh_items(fetcher, source["url"], robots, int(cfg.get("max_age_hours", 72))):
-            if len(out) >= int(cfg.get("max_new", 15)):
-                break
-            if item.url in known:
-                continue
-            entry = fetch_article(fetcher, item.url, respect_robots=robots, title_hint=item.title,
-                                  published_hint=item.published)
-            if entry:
-                out.append(entry)
-        return FetchResult(entries=out)
+        items = fresh_items(fetcher, source["url"], robots, int(cfg.get("max_age_hours", 72)))
+        return FetchResult(entries=collect_articles(
+            fetcher, [i.url for i in items], set(source.get("known_ids") or []), int(cfg.get("max_new", 15)), robots,
+            hints={i.url: (i.title, i.published) for i in items}))

@@ -11,7 +11,7 @@ from urllib.parse import urljoin, urlsplit
 
 import lxml.html
 
-from geonews.ingestion.connectors.article import article_links, fetch_article
+from geonews.ingestion.connectors.article import article_links, collect_articles
 from geonews.ingestion.connectors.base import FetchResult, respects_robots
 from geonews.ingestion.fetcher import Fetcher
 
@@ -30,14 +30,6 @@ class HtmlListConnector:
                      if urlsplit(u).scheme in ("http", "https") and urlsplit(u).netloc == host]
         else:
             links = article_links(r.text, r.url)
-        known = set(source.get("known_ids") or [])
-        out = []
-        for url in links:
-            if len(out) >= int(cfg.get("max_new", 10)):
-                break
-            if url in known:
-                continue
-            entry = fetch_article(fetcher, url, respect_robots=robots, require_date=not cfg.get("allow_undated"))
-            if entry:
-                out.append(entry)
-        return FetchResult(entries=out)
+        return FetchResult(entries=collect_articles(
+            fetcher, links, set(source.get("known_ids") or []), int(cfg.get("max_new", 10)), robots,
+            require_date=not cfg.get("allow_undated")))
