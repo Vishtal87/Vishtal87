@@ -40,7 +40,22 @@ class PlaceRec:
 
 _DIGITS = re.compile(r"\d")
 # Letters used by Turkic/Mongolic Cyrillic orthographies — such names are not Russian display names.
-_NON_RU_CYRL = set("һәөүңҗұқғіїєґўјљњћџ")
+_NON_RU_CYRL = set("һәөүңҗұқғіїєґўјљњћџђҷҳӣӯ")
+_RU_LIKE = re.compile(r"ь(?!о)|[йяю]|(?:^|[\s-])э", re.IGNORECASE)   # Тель-Авив, Линкольн, Нойда, Эксетер
+# spellings Russian never has: Bulgarian 'Донкастър', 'Хондзьо', 'Спрингфийлд'; Ukrainian 'Логроньйо', 'Слупськ',
+# 'Зениця'; a soft sign after a vowel; combining marks
+_NOT_RU = re.compile(r"ъ(?![еёюя])|ьо|ьй|[аеёиоуыэюя]ь|ий(?=[бвгджзклмнпрстфхцчшщ])|ськ\b|ця\b|[\u0300-\u036f\u0483-\u0489]",
+                      re.IGNORECASE)
+
+
+def ru_like(name: str) -> bool:
+    """Russian spelling signs that Serbian/Macedonian variants lack ('Тел-Авив' vs 'Тель-Авив')."""
+    return bool(_RU_LIKE.search(name)) and not _NOT_RU.search(name)
+
+
+def non_russian(name: str) -> bool:
+    """A Cyrillic spelling Russian never uses ('Донкастър', 'Слупськ', 'Лос Анђелес')."""
+    return bool(_NOT_RU.search(name)) or any(ch in _NON_RU_CYRL for ch in name.lower())
 
 
 def keep_alt_name(n: str) -> bool:
@@ -106,6 +121,9 @@ def pick_ru_display(latin_name: str, alts: list[str]) -> str | None:
     def score(a: str) -> tuple:
         sim = SequenceMatcher(None, a.lower().translate(_TRANSLIT), lat).ratio()
         ntok_ok = len(a.replace("-", " ").split()) == len(latin_name.replace("-", " ").split())
-        return (_is_known_geo(a), ntok_ok, round(sim, 2), -len(a))
+        # Russian hyphenates compound foreign names (Нью-Йорк, Абу-Даби, Лос-Анджелес) and writes е, not ё, in them
+        hyphen = "-" in a and " " not in a and (" " in latin_name or "-" in latin_name)
+        return (_is_known_geo(a), ntok_ok, hyphen, not _NOT_RU.search(a), ru_like(a), "ё" not in a.lower(),
+                round(sim, 2), -len(a))
 
     return max(cands, key=score)

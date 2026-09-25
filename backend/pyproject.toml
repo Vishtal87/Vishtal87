@@ -35,7 +35,7 @@ build-backend = "setuptools.build_meta"
 include = ["geonews*"]
 
 [tool.setuptools.package-data]
-"geonews.db" = ["migrations/*.sql"]
+"geonews.db" = ["migrations/*.sql", "migrations/*.py"]   # .py: data migrations with run(conn)
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
