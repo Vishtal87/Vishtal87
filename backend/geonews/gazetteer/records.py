@@ -69,14 +69,43 @@ def guess_lang(n: str) -> str | None:
     return None
 
 
+_TRANSLIT = str.maketrans({
+    "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "e", "ж": "zh", "з": "z", "и": "i", "й": "y",
+    "к": "k", "л": "l", "м": "m", "н": "n", "о": "o", "п": "p", "р": "r", "с": "s", "т": "t", "у": "u", "ф": "f",
+    "х": "kh", "ц": "ts", "ч": "ch", "ш": "sh", "щ": "shch", "ъ": "", "ы": "y", "ь": "", "э": "e", "ю": "yu", "я": "ya",
+})
+
+
+def _is_known_geo(word: str) -> bool:
+    from geonews.domain.text_norm import _analyzer  # lazy: heavy dictionary
+
+    for tok in word.lower().replace("-", " ").split():
+        parses = _analyzer("ru").parse(tok)
+        if not parses or not parses[0].is_known:
+            return False
+        if not any({"Geox"} & set(p.tag.grammemes) for p in parses[:3]):
+            return False
+    return True
+
+
 def pick_ru_display(latin_name: str, alts: list[str]) -> str | None:
-    """Offline heuristic (alternate names carry no language tags in the offline bundle)."""
-    ntok = len(latin_name.replace("-", " ").split())
-    cands = [a for a in alts if script_of(a) == "cyrl" and not any(c in _NON_RU_CYRL for c in a.lower())]
-    same = [a for a in cands if len(a.replace("-", " ").split()) == ntok and "(" not in a]
-    pool = same or cands
-    if not pool:
+    """Offline heuristic (alternate names carry no language tags in the offline bundle).
+
+    Rank Russian-looking Cyrillic variants by: known geographic word in the Russian dictionary
+    ('Москва', 'Красноярск'), then similarity of its transliteration to the Latin name.
+    Avoids picking obscure variants like 'Муско' (Moscow) or truncations like 'Краснояр'.
+    """
+    from difflib import SequenceMatcher
+
+    cands = [a.replace("\u0301", "") for a in alts
+             if script_of(a) == "cyrl" and "(" not in a and not any(c in _NON_RU_CYRL for c in a.lower())]
+    if not cands:
         return None
-    # Prefer the most "plain" variant (no stress marks, shortest).
-    pool.sort(key=lambda a: ("́" in a, len(a)))
-    return pool[0].replace("́", "")
+    lat = latin_name.lower()
+
+    def score(a: str) -> tuple:
+        sim = SequenceMatcher(None, a.lower().translate(_TRANSLIT), lat).ratio()
+        ntok_ok = len(a.replace("-", " ").split()) == len(latin_name.replace("-", " ").split())
+        return (_is_known_geo(a), ntok_ok, round(sim, 2), -len(a))
+
+    return max(cands, key=score)

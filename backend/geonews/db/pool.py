@@ -17,7 +17,8 @@ def get_pool() -> ConnectionPool:
     global _pool
     if _pool is None:
         _pool = ConnectionPool(
-            settings.dsn, min_size=1, max_size=10, kwargs={"row_factory": dict_row, "autocommit": False}, open=True
+            settings.dsn, min_size=1, max_size=10, kwargs={"row_factory": dict_row, "autocommit": False}, open=True,
+            check=ConnectionPool.check_connection,  # survive DB restarts: validate on checkout
         )
     return _pool
 
