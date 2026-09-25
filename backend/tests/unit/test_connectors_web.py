@@ -1,4 +1,5 @@
 """Page-based collection: broken feed repair, news sitemaps, generic listing pages, per-source robots override."""
+import re
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -53,6 +54,15 @@ def test_broken_feed_is_repaired_instead_of_rejected():
 
 def test_article_links_keep_same_site_articles_only():
     assert article_links(LISTING, "https://news.test/") == ["https://news.test/news/2026/09/sklad-v-dinskoy"]
+
+
+def test_html_list_skips_pages_without_publication_date():
+    undated = re.sub(r'<meta property="article:published_time"[^>]*>', "", _article("Раздел", NOW))
+    listing = '<a href="/news/sklad-v-dinskoy">Склад загорелся в станице Динской вечером в среду</a>'
+    f, _ = _fetcher({"/": (200, listing), "/news/sklad-v-dinskoy": (200, undated)})
+    assert CONNECTORS["html_list"].fetch({"url": "https://news.test/"}, f).entries == []
+    kept = CONNECTORS["html_list"].fetch({"url": "https://news.test/", "config": {"allow_undated": True}}, f)
+    assert len(kept.entries) == 1
 
 
 def test_html_list_collects_articles_and_skips_known():

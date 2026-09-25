@@ -47,8 +47,10 @@ def article_links(page_html: str, base_url: str) -> list[str]:
 
 
 def fetch_article(fetcher: Fetcher, url: str, respect_robots: bool = True, title_hint: str = "",
-                  published_hint: str | None = None) -> RawEntry | None:
-    """Title, publication time and main text of one article page; None when the page yields no article."""
+                  published_hint: str | None = None, require_date: bool = True) -> RawEntry | None:
+    """Title, publication time and main text of one article page; None when the page yields no article.
+    Without a publication date a page is skipped by default: a section page or an old story would otherwise
+    get the download time and show up as fresh news."""
     import trafilatura  # heavy, lazy
 
     try:
@@ -66,5 +68,8 @@ def fetch_article(fetcher: Fetcher, url: str, respect_robots: bool = True, title
     except (ValueError, lxml.etree.ParserError):
         date, og_title = None, ""
     title = title_hint or og_title or (doc.title or "").strip()
-    return RawEntry(external_id=url, url=page.url or url, title=title, body_text=text,
-                    published=published_hint or date or (doc.date if doc else None), raw=page.text[:8000])
+    published = published_hint or date or (doc.date if doc else None)
+    if require_date and not published:
+        return None
+    return RawEntry(external_id=url, url=page.url or url, title=title, body_text=text, published=published,
+                    raw=page.text[:8000])

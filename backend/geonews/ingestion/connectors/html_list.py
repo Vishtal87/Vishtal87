@@ -1,7 +1,8 @@
 """Sites without feeds: a news listing page + article pages (main text via trafilatura).
 
-Config (all optional): {"item_xpath": "//a[@class='news-link']/@href", "max_new": 10, "respect_robots": true}.
-Without item_xpath, article links are recognised heuristically (headline-length anchor, article-like path).
+Config (all optional): {"item_xpath": "//a[@class='news-link']/@href", "max_new": 10, "respect_robots": true,
+"allow_undated": false}. Without item_xpath, article links are recognised heuristically (headline-length anchor,
+article-like path). Pages without a publication date are skipped unless allow_undated is set.
 Only links on the listing's own host are followed. Access model: public_web.
 """
 from __future__ import annotations
@@ -36,7 +37,7 @@ class HtmlListConnector:
                 break
             if url in known:
                 continue
-            entry = fetch_article(fetcher, url, respect_robots=robots)
+            entry = fetch_article(fetcher, url, respect_robots=robots, require_date=not cfg.get("allow_undated"))
             if entry:
                 out.append(entry)
         return FetchResult(entries=out)
