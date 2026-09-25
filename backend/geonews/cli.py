@@ -18,6 +18,7 @@ def main(argv: list[str] | None = None) -> None:
     s.add_argument("file", nargs="?", default=None)
     sub.add_parser("load-categories", help="load/refresh categories from config/categories.yaml")
     sub.add_parser("reset-news", help="DANGER: delete all ingested news/events/jobs (keeps gazetteer & sources)")
+    sub.add_parser("rebuild-rollup", help="rebuild the map activity rollup from events (after bulk operations)")
     w = sub.add_parser("worker", help="run a background worker")
     w.add_argument("kind", choices=["ingest", "process", "maintenance", "all"])
     w.add_argument("--once", action="store_true", help="drain available work and exit")
@@ -54,11 +55,18 @@ def main(argv: list[str] | None = None) -> None:
 
         with connect() as conn:
             conn.execute("TRUNCATE event_change_log, event_relation, event_article, event, article_location, "
-                         "article_analysis, article_version, article, raw_item, job RESTART IDENTITY CASCADE")
+                         "article_analysis, article_version, article, raw_item, job, event_rollup RESTART IDENTITY CASCADE")
             conn.execute("UPDATE source SET next_poll_at = now(), consecutive_failures = 0, last_error = NULL, "
                          "http_etag = NULL, http_last_modified = NULL")
             conn.commit()
         print("news data reset")
+    elif args.cmd == "rebuild-rollup":
+        from geonews.db.pool import connect
+
+        with connect() as conn:
+            n = conn.execute("SELECT rebuild_event_rollup() AS n").fetchone()["n"]
+            conn.commit()
+        print("rollup rows:", n)
     elif args.cmd == "worker":
         from geonews.workers.run import run_worker
 

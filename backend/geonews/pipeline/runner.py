@@ -98,7 +98,7 @@ class Processor:
 
         # NORMALIZATION / TEXT EXTRACTION
         body = entry.body_text or normalize.html_to_text(entry.body_html)
-        title = normalize.clean_text(entry.title) or body[:120]
+        title = normalize.html_to_text(entry.title).replace("\n", " ") or body[:120]   # titles may carry markup too
         if title and body.startswith(title):  # page extractors often repeat the headline as the first line
             body = body[len(title):].lstrip(" \n.:—-")
         if not title and not body:
@@ -128,8 +128,8 @@ class Processor:
         b = dedup.bands(sh)
 
         a = {
-            "source_id": raw["source_id"], "raw_item_id": raw_id, "external_id": entry.external_id, "url": entry.url,
-            "canonical_url": normalize.canonical_url(entry.url), "title": title[:1000], "text": body[:20000],
+            "source_id": raw["source_id"], "raw_item_id": raw_id, "external_id": entry.external_id,
+            "url": normalize.safe_url(entry.url), "canonical_url": normalize.canonical_url(normalize.safe_url(entry.url)), "title": title[:1000], "text": body[:20000],
             "excerpt": normalize.excerpt(body or title), "lang": lang, "lang_confidence": lang_conf,
             "published_at": published, "published_tz_assumed": tz_assumed, "event_time": et.at, "is_live": live,
             "content_hash": chash, "simhash": sh, "sh_b0": b[0], "sh_b1": b[1], "sh_b2": b[2], "sh_b3": b[3],

@@ -14,6 +14,18 @@ _NL = re.compile(r"\n{3,}")
 _SENT_END = re.compile(r"(?<=[.!?…])\s+")
 
 
+def safe_url(url: str | None) -> str | None:
+    """Only http(s) links ever reach the UI (a feed could carry javascript:/data: URLs)."""
+    if not url:
+        return None
+    u = url.strip()
+    try:
+        p = urlsplit(u)
+    except ValueError:
+        return None
+    return u if p.scheme in ("http", "https") and p.netloc else None
+
+
 def canonical_url(url: str | None) -> str | None:
     if not url:
         return None

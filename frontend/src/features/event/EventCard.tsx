@@ -137,7 +137,7 @@ export function EventCard(p: Props) {
                     {s.lang && s.lang !== lang ? <span className="tag">{s.lang.toUpperCase()}</span> : null}
                     {s.media === 'video' ? <span className="tag"><Icon name="video" size={13} /> video</span> : null}
                     {s.location.outlier_km != null ? <span className="tag tag--warn">≠ {s.location.name} ({s.location.outlier_km} км)</span> : null}
-                    {s.url ? (
+                    {s.url && /^https?:\/\//i.test(s.url) ? (
                       <a className="btn btn--text btn--sm" href={s.url} target="_blank" rel="noopener noreferrer nofollow">
                         {t.openOriginal} <Icon name="external" size={14} /><span className="sr-only"> ({hostOf(s.url)})</span>
                       </a>) : null}

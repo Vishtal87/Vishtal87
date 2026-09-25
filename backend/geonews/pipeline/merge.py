@@ -24,18 +24,20 @@ def _load(conn: psycopg.Connection, ids: list[int]) -> dict[int, dict]:
     return {r["id"]: r for r in rows}
 
 
-def merge_similar_events(conn: psycopg.Connection, hours: int = 72, limit: int = 2000) -> int:
+def merge_similar_events(conn: psycopg.Connection, changed_within_min: int = 15, limit: int = 2000) -> int:
+    """Incremental: only events changed recently are compared (against any active event nearby in time/space),
+    so the cost follows the ingest rate, not the size of the event table."""
     pairs = conn.execute(
-        """SELECT a.id AS a_id, b.id AS b_id FROM event a JOIN event b ON b.id > a.id
+        """SELECT DISTINCT least(a.id, b.id) AS a_id, greatest(a.id, b.id) AS b_id FROM event a JOIN event b ON b.id <> a.id
            WHERE a.status = 'active' AND b.status = 'active'
-             AND a.updated_at > now() - make_interval(hours => %(h)s)
+             AND a.updated_at > now() - make_interval(mins => %(m)s)
              AND b.first_seen_at <= a.last_article_at + interval '72 hours'
              AND a.first_seen_at <= b.last_article_at + interval '72 hours'
              AND (a.locality_id = b.locality_id
                   OR (a.location_precision = b.location_precision AND a.location_precision IN ('admin1', 'admin2')
                       AND a.geo_entity_id = b.geo_entity_id)
                   OR ST_DWithin(a.geom::geography, b.geom::geography, 20000))
-           LIMIT %(lim)s""", {"h": hours, "lim": limit}).fetchall()
+           LIMIT %(lim)s""", {"m": changed_within_min, "lim": limit}).fetchall()
     if not pairs:
         return 0
     evs = _load(conn, sorted({p["a_id"] for p in pairs} | {p["b_id"] for p in pairs}))

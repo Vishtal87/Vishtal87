@@ -3,7 +3,7 @@ Config: {"item_xpath": "//a[@class='news-link']/@href", "max_new": 10, "title_xp
          "date_xpath": "//time/@datetime"}. Obeys robots.txt (enforced in Fetcher). Access model: public_web."""
 from __future__ import annotations
 
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 
 import lxml.html
 
@@ -21,7 +21,10 @@ class HtmlListConnector:
         cfg = source.get("config") or {}
         r = fetcher.get(source["url"])
         doc = lxml.html.fromstring(r.text)
-        links = [urljoin(r.url, h) for h in doc.xpath(cfg.get("item_xpath", "//article//a/@href"))]
+        host = urlsplit(r.url).netloc
+        # follow only same-site http(s) links: a list page must not steer us to other hosts / internal networks
+        links = [u for u in (urljoin(r.url, h) for h in doc.xpath(cfg.get("item_xpath", "//article//a/@href")))
+                 if urlsplit(u).scheme in ("http", "https") and urlsplit(u).netloc == host]
         known = set(source.get("known_ids") or [])
         out = []
         for url in links:

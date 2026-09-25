@@ -161,7 +161,14 @@ export function App() {
         <FilterBar filters={s.filters} categories={categories} onChange={onFilters} />
       </div>
 
-      {health?.demo_mode ? <div className="demo-banner" role="note"><Icon name="info" size={16} /> {t.demo}</div> : null}
+      {health?.demo_mode || (health && health.sources.failing > 0) ? (
+        <div className="banners">
+          {health.demo_mode ? <div className="demo-banner" role="note"><Icon name="info" size={16} /> {t.demo}</div> : null}
+          {health.sources.failing > 0 ? (
+            <div className="demo-banner demo-banner--muted" role="status" title={t.sourcesDown(health.sources.failing, health.sources.enabled)}>
+              <Icon name="info" size={16} /> {t.sourcesDown(health.sources.failing, health.sources.enabled)}
+            </div>) : null}
+        </div>) : null}
 
       <div className="map-status" aria-live="polite">
         <nav className="crumbs crumbs--map" aria-label="breadcrumb">

@@ -35,7 +35,8 @@ interface Props {
 maplibregl.setWorkerUrl(workerUrl)
 
 const EMPTY: FeatureCollection = { type: 'FeatureCollection', features: [] }
-const GLOBAL_LEVELS: Level[] = ['continent', 'country', 'admin1']
+// continents & countries: small global result, cached per filter set; finer levels are viewport-bounded
+const GLOBAL_LEVELS: Level[] = ['continent', 'country']
 
 export function levelFor(zoom: number): Level {
   if (zoom < 2.2) return 'continent'
