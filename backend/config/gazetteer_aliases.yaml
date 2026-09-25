@@ -1,0 +1,12 @@
+# Colloquial / informal names that news use but gazetteers often lack.
+# Resolved by (country, kind, any existing name) — no hard-coded ids. Extend freely.
+- {country: RU, kind: admin1, name: "Краснодарский край", aliases: ["Кубань", "Kuban"]}
+- {country: RU, kind: admin1, name: "Московская область", aliases: ["Подмосковье"]}
+- {country: RU, kind: admin1, name: "Ставропольский край", aliases: ["Ставрополье"]}
+- {country: RU, kind: admin1, name: "Пермский край", aliases: ["Прикамье"]}
+- {country: RU, kind: admin1, name: "Ленинградская область", aliases: ["Ленобласть"]}
+- {country: RU, kind: admin1, name: "Адыгея", aliases: ["Республика Адыгея", "Адыгее"]}
+- {country: RU, kind: locality, name: "Saint Petersburg", aliases: ["Питер"]}
+- {country: RU, kind: locality, name: "Yekaterinburg", aliases: ["Екат"]}
+- {country: US, kind: locality, name: "New York City", aliases: ["NYC"]}
+- {country: DE, kind: admin1, name: "Bavaria", aliases: ["Freistaat Bayern"]}

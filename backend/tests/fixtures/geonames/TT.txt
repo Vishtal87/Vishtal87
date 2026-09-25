@@ -1,0 +1,8 @@
+2017370	Russia	Russia	Россия	60.0	100.0	A	PCLI	RU		00				144478050			Europe/Moscow	2024-01-01
+90000001	Test Krai	Test Krai	Тестовый край	45.0	39.0	A	ADM1	RU		T1				1000000			Europe/Moscow	2024-01-01
+90000002	Testovskiy Rayon	Testovskiy Rayon	Тестовский район	45.2	39.2	A	ADM2	RU		T1	90000002			50000			Europe/Moscow	2024-01-01
+90000003	Khutor Malyy	Khutor Malyy	хутор Малый,Малый	45.25	39.25	P	PPL	RU		T1	90000002			50			Europe/Moscow	2024-01-01
+90000004	Testograd	Testograd	Тестоград	45.3	39.3	P	PPLA2	RU		T1	90000002			20000			Europe/Moscow	2024-01-01
+90000005	Mikrorayon Yuzhnyy	Mikrorayon Yuzhnyy	Южный	45.301	39.301	P	PPLX	RU		T1	90000002			0			Europe/Moscow	2024-01-01
+90000006	Old Ruins	Old Ruins		45.4	39.4	P	PPLH	RU		T1				0			Europe/Moscow	2024-01-01
+90000007	Some Hill	Some Hill		45.4	39.4	T	HLL	RU		T1				0			Europe/Moscow	2024-01-01

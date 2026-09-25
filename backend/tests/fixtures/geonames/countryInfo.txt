@@ -1,0 +1,2 @@
+#ISO	ISO3	ISO-Numeric	fips	Country	Capital	Area(in sq km)	Population	Continent	tld	CurrencyCode	CurrencyName	Phone	Postal Code Format	Postal Code Regex	Languages	geonameid	neighbours	EquivalentFipsCode
+RU	RUS	643	RS	Russia	Moscow	17100000	144478050	EU	.ru	RUB	Ruble	7	######	^(\d{6})$	ru	2017370		

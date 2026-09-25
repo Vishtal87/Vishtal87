@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*.egg-info/
+# Node
+node_modules/
+dist/
+# Data (downloaded by scripts/fetch_*.sh)
+data/vendor/
+data/geonames/
+# Runtime
+*.log
+.run/
+test-results/
+playwright-report/
+.env
