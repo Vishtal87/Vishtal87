@@ -26,6 +26,7 @@ case "$cmd" in
     [ -n "${POSTGRES_PASSWORD:-}" ] || { echo "set POSTGRES_PASSWORD in .env (openssl rand -hex 24)"; exit 1; }
     "${DC[@]}" build
     "${DC[@]}" up -d --wait db
+    "${DC[@]}" stop worker 2>/dev/null || true   # a reinstall: no old worker processing while the schema changes
     cli migrate
     cli load-categories
     cli import-offline --if-empty
@@ -43,7 +44,10 @@ case "$cmd" in
     src="backend/config/${GEONEWS_SOURCES:-sources.ru.yaml}"
     [ -f "$src" ] || { echo "$src not found: run scripts/prod.sh verify-sources first"; exit 1; }
     mkdir -p backups
-    "${DC[@]}" up -d --build --remove-orphans
+    "${DC[@]}" build
+    # the old worker must not take jobs while migrations run (a data migration may queue reprocessing for the new code)
+    "${DC[@]}" stop worker 2>/dev/null || true
+    "${DC[@]}" up -d --remove-orphans
     "$0" status ;;
   status)
     "${DC[@]}" ps
