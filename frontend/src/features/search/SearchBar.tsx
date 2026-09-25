@@ -60,7 +60,7 @@ export function SearchBar({ near, onPick }: { near: { lat: number; lon: number }
             if (e.key === 'Enter') pick(results[active])
             if (e.key === 'Escape') setOpen(false)
           }} />
-        {q ? <button type="button" className="icon-btn icon-btn--sm" aria-label={t.close}
+        {q ? <button type="button" className="icon-btn icon-btn--sm" aria-label={t.clearSearch}
           onClick={() => { setQ(''); setResults(null); input.current?.focus() }}><Icon name="close" size={18} /></button>
           : <kbd className="search__kbd">/</kbd>}
       </div>

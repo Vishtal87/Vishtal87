@@ -142,7 +142,7 @@ await step(12, 'Увидеть временную последовательно
 })
 
 await step(13, 'Увидеть новые события без перезагрузки', async () => {
-  await page.locator('.icon-btn[aria-label="Закрыть"]').first().click()
+  await page.locator('.panel .icon-btn[aria-label="Закрыть"]').first().click()
   await page.waitForTimeout(800)
   const before = await page.locator('.latest__count').innerText().catch(() => '')
   const res = await fetch(`${DEVSTAND}/control/release?n=2`, { method: 'POST' }).then((r) => r.json())

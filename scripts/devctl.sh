@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Local dev process control: scripts/devctl.sh start|stop|restart|status <service>...
-# Services: db api ingest process maintenance devstand web. Logs & pids in .run/
+# Services: db devstand api ingest process maintenance web (devstand first: ingest checks its robots.txt). Logs & pids in .run/
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 RUN="$ROOT/.run"; mkdir -p "$RUN"
@@ -40,7 +40,7 @@ status() {
 }
 
 action=${1:-status}; shift || true
-services=${*:-db api ingest process maintenance devstand web}
+services=${*:-db devstand api ingest process maintenance web}
 for s in $services; do
   case "$action" in
     start) start "$s" ;; stop) stop "$s" ;; restart) stop "$s"; sleep 1; start "$s" ;; status) status "$s" ;;

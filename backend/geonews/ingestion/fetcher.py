@@ -64,13 +64,13 @@ class Fetcher:
             try:
                 r = self.client.get(base + "/robots.txt", timeout=10)
                 if r.status_code >= 500:
-                    rp.disallow_all, ttl = True, 600   # RFC 9309: robots.txt unreachable -> assume full disallow
+                    rp.disallow_all, ttl = True, 60    # RFC 9309: robots.txt unreachable -> assume full disallow
                 elif r.status_code >= 400:
                     rp.parse([])                       # no robots.txt (4xx): everything allowed
                 else:
                     rp.parse(r.text.splitlines())
             except httpx.HTTPError:
-                rp.disallow_all, ttl = True, 600
+                rp.disallow_all, ttl = True, 60
             self._robots[base] = (rp, time.time() + ttl)
         return rp.can_fetch(settings.user_agent, url)
 
