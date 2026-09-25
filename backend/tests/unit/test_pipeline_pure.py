@@ -98,9 +98,9 @@ def test_time_gap_and_distant_place_veto():
 
 # ---------------------------------------------------------------- trust
 def test_forwards_of_one_post_are_one_independent_source():
-    reps = [Report(i, "telegram", 3, 77) for i in range(1, 11)]
+    reps = [Report(1, "telegram", 3, 77)] + [Report(i, "telegram", 3, 77, is_copy=True) for i in range(2, 11)]
     t = trust_label(reps)
-    assert t["independent_count"] == 1 and t["label"] == "single_source"
+    assert t["independent_count"] == 1 and t["label"] == "single_source" and t["source_count"] == 10
     t2 = trust_label(reps + [Report(20, "media", 2, 90)])
     assert t2["label"] == "multiple_sources" and t2["independent_count"] == 2
     assert trust_label([Report(1, "official", 1, 5)])["label"] == "official"

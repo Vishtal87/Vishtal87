@@ -16,14 +16,15 @@ class Report:
     source_type: str
     trust_tier: int
     origin_group_id: int | None
+    is_copy: bool = False       # forward/repost of another article (duplicate_of set)
 
 
 def trust_label(reports: list[Report]) -> dict:
     sources = {r.source_id for r in reports}
-    # independence = distinct text origins published by distinct sources
-    origins = {(r.origin_group_id or -r.source_id) for r in reports}
-    independent = min(len(origins), len(sources))
-    has_official = any(r.source_type == "official" or r.trust_tier == 1 for r in reports)
+    # independent = sources that published at least one ORIGINAL text (a channel that only forwarded
+    # someone else's post adds reach, not confirmation)
+    independent = len({r.source_id for r in reports if not r.is_copy})
+    has_official = any((r.source_type == "official" or r.trust_tier == 1) and not r.is_copy for r in reports)
     if has_official:
         label = "official"
     elif independent >= 2:

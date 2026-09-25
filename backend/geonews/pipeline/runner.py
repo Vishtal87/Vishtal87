@@ -87,6 +87,8 @@ class Processor:
         # NORMALIZATION / TEXT EXTRACTION
         body = entry.body_text or normalize.html_to_text(entry.body_html)
         title = normalize.clean_text(entry.title) or body[:120]
+        if title and body.startswith(title):  # page extractors often repeat the headline as the first line
+            body = body[len(title):].lstrip(" \n.:—-")
         if not title and not body:
             news_repo.set_raw_status(conn, raw_id, "skipped", "empty item")
             conn.commit()

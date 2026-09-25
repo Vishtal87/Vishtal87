@@ -57,9 +57,9 @@ def update_article(conn: psycopg.Connection, article_id: int, a: dict) -> None:
 
 def save_version(conn: psycopg.Connection, old: dict) -> None:
     conn.execute(
-        """INSERT INTO article_version (article_id, version, title, excerpt, content_hash)
-           VALUES (%s, %s, %s, %s, %s) ON CONFLICT DO NOTHING""",
-        (old["id"], old["version"], old["title"], old["excerpt"], old["content_hash"]),
+        """INSERT INTO article_version (article_id, version, title, excerpt, content_hash, published_at)
+           VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING""",
+        (old["id"], old["version"], old["title"], old["excerpt"], old["content_hash"], old["published_at"]),
     )
 
 
@@ -214,18 +214,24 @@ def update_event(conn: psycopg.Connection, event_id: int, f: dict) -> None:
 def log_change(conn: psycopg.Connection, event_id: int, op: str) -> int:
     log_id = conn.execute("INSERT INTO event_change_log (event_id, op) VALUES (%s, %s) RETURNING id",
                           (event_id, op)).fetchone()["id"]
-    row = conn.execute(
-        """SELECT id, category, source_types, synthetic, locality_id, admin1_id, country_id, is_live,
-                  ST_Y(geom) AS lat, ST_X(geom) AS lon, last_article_at FROM event WHERE id = %s""", (event_id,)
-    ).fetchone()
+    row = change_payload(conn, event_id)
     if row:
-        payload = {"log_id": log_id, "op": op, "id": event_id, "category": row["category"],
-                   "source_types": row["source_types"], "lat": row["lat"], "lon": row["lon"],
-                   "locality_id": row["locality_id"], "admin1_id": row["admin1_id"], "country_id": row["country_id"],
-                   "is_live": row["is_live"], "synthetic": row["synthetic"],
-                   "last_article_at": row["last_article_at"].isoformat()}
-        conn.execute("SELECT pg_notify('event_changes', %s)", (json.dumps(payload),))
+        conn.execute("SELECT pg_notify('event_changes', %s)", (json.dumps({"log_id": log_id, "op": op, **row}),))
     return log_id
+
+
+def change_payload(conn: psycopg.Connection, event_id: int) -> dict | None:
+    """Compact event summary for realtime clients (well under the 8 kB NOTIFY limit)."""
+    r = conn.execute(
+        """SELECT ev.id, left(ev.title, 200) AS title, ev.category, ev.source_types, ev.synthetic, ev.is_live,
+                  ev.trust_label, ev.source_count, ev.geo_entity_id, ev.ancestors, ev.location_relation, ev.status,
+                  ST_Y(ev.geom) AS lat, ST_X(ev.geom) AS lon, ev.last_article_at,
+                  (SELECT coalesce(g.names->>'ru', g.name) FROM geo_entity g WHERE g.id = ev.geo_entity_id) AS place_ru,
+                  (SELECT g.name FROM geo_entity g WHERE g.id = ev.geo_entity_id) AS place_en
+           FROM event ev WHERE ev.id = %s""", (event_id,)).fetchone()
+    if not r:
+        return None
+    return {**r, "ancestors": list(r["ancestors"] or []), "last_article_at": r["last_article_at"].isoformat()}
 
 
 def since(dt: datetime, days: int) -> datetime:

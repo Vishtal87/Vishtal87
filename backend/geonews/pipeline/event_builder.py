@@ -98,7 +98,8 @@ def build_event(members: list[dict], anc: dict[int, tuple[int, ...]]) -> dict:
         terms.update((m.get("cluster_features") or {}).get("terms") or {})
     nums = sorted({n for m in members for n in ((m.get("cluster_features") or {}).get("numbers") or [])})[:30]
     names = sorted({n for m in members for n in ((m.get("cluster_features") or {}).get("names") or [])})[:60]
-    tr = trust_label([Report(m["source_id"], m["source_type"], m["trust_tier"], m["origin_group_id"]) for m in members])
+    tr = trust_label([Report(m["source_id"], m["source_type"], m["trust_tier"], m["origin_group_id"],
+                             m["duplicate_of"] is not None) for m in members])
     event_times = [m["event_time"] for m in members if m["event_time"]]
     return {
         "title": rep["title"],
