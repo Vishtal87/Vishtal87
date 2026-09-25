@@ -207,6 +207,27 @@ def create_app(stand: Stand) -> FastAPI:
                 f"{stand.published(r):%d.%m.%Y %H:%M}</time><p>{html.escape(r['body'])}</p>"
                 f"<p>Источник: демонстрационные синтетические данные.</p></article><footer>© DEMO</footer></body></html>")
 
+    def _post_page(r: dict, extra: str = "") -> str:
+        return (f"<html><head><title>{html.escape(r['title'])}</title></head><body><article>"
+                f"<p><b>{html.escape(r['source'])}</b> · {stand.published(r):%d.%m.%Y %H:%M} UTC · DEMO</p>{extra}"
+                f"<h1>{html.escape(r['title'])}</h1><p>{html.escape(r['body'])}</p>"
+                f"<p><small>Синтетические демонстрационные данные.</small></p></article></body></html>")
+
+    @app.get("/tg/{channel}/{post_id}", response_class=HTMLResponse)
+    def telegram_post(channel: str, post_id: int):
+        r = next((x for x in stand.reports if x["source"] == channel and stand.tg_post_id(x) == post_id
+                  and x["id"] in stand.released), None)
+        if not r:
+            raise HTTPException(404)
+        return _post_page(r)
+
+    @app.get("/yt/watch", response_class=HTMLResponse)
+    def youtube_watch(v: str):
+        r = next((x for x in stand.reports if stand.guid(x) == v and x["id"] in stand.released), None)
+        if not r:
+            raise HTTPException(404)
+        return _post_page(r, "<div style='background:#000;color:#fff;padding:40px'>▶ video (demo)</div>")
+
     @app.get("/gdelt/api/v2/doc/doc")
     def gdelt(query: str = "", format: str = "json", mode: str = "artlist", maxrecords: int = 75, sort: str = ""):
         stand.check_failure("demo-gdelt")

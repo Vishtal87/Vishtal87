@@ -30,6 +30,18 @@ MIN_MAP_CONFIDENCE = 0.2   # below this a location is kept as analysis but not u
 MAX_MAP_AMBIGUITY = 0.45   # "Ивановка" with several equally plausible readings stays off the map
 
 
+def event_features(ev: dict) -> clustering.Features:
+    """Clustering features of an existing event row (see news_repo.EVENT_COLS + place_population)."""
+    t = ev["terms"] or {}
+    return clustering.Features(
+        at=ev["event_time"] or ev["last_article_at"], category=ev["category"], event_type=ev["event_type"],
+        locality_id=ev["locality_id"], admin2_id=ev["admin2_id"], admin1_id=ev["admin1_id"],
+        country_id=ev["country_id"], lat=ev["lat"], lon=ev["lon"],
+        radius_km=(ev["radius_m"] or 0) / 1000 or None, precision=ev["location_precision"],
+        place_population=ev["place_population"], lang=ev["lang"], terms=Counter(t.get("terms") or {}),
+        numbers=set(t.get("numbers") or []), names=set(t.get("names") or []))
+
+
 def _mention_words(geo: GeoResult) -> set[str]:
     """Words naming the MAIN place: sharing the city name says nothing about being the same event.
     Secondary places (a district, a street) stay: they are strong same-event evidence, even across languages."""
@@ -250,15 +262,9 @@ class Processor:
         conn.execute("SELECT pg_advisory_xact_lock(%s)", (zlib.crc32(f"cluster:{lock_key}".encode()),))
         best, best_s, best_d = None, 0.0, {}
         for ev in news_repo.candidate_events(conn, feats.at, feats.locality_id, feats.admin1_id, p.lat, p.lon):
-            t = ev["terms"] or {}
-            ef = clustering.Features(
-                at=ev["event_time"] or ev["last_article_at"], category=ev["category"], event_type=ev["event_type"],
-                locality_id=ev["locality_id"], admin2_id=ev["admin2_id"], admin1_id=ev["admin1_id"],
-                country_id=ev["country_id"], lat=ev["lat"], lon=ev["lon"],
-                radius_km=(ev["radius_m"] or 0) / 1000 or None, precision=ev["location_precision"],
-                place_population=ev["place_population"], lang=ev["lang"], terms=Counter(t.get("terms") or {}),
-                numbers=set(t.get("numbers") or []), names=set(t.get("names") or []))
-            if ev["member_sources"] == [a["source_id"]] and abs((ev["last_article_at"] - a["published_at"]).total_seconds()) > 18 * 3600:
+            ef = event_features(ev)
+            if clustering.recurring_series({a["source_id"]}, set(ev["member_sources"] or []),
+                                           abs((ev["last_article_at"] - a["published_at"]).total_seconds()) / 3600):
                 continue  # a source's recurring series (daily forecast, weekly digest) is not one event
             s, d = clustering.match_score(feats, ef)
             # the event may have started before; also compare with its latest activity

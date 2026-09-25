@@ -145,3 +145,18 @@ def test_classify_multilingual():
     assert c.category == "incidents" and c.event_type == "fire"
     assert classify("Hochwasser", "Nach Unwetter steigen die Pegel", "de").category == "weather"
     assert classify("ФК Краснодар обыграл соперника", "Матч завершился со счётом 2:0", "ru").category == "sport"
+
+
+def test_two_fires_in_big_city_with_different_streets_do_not_merge():
+    a = _f(place_population=900_000, terms=Counter({"пожар": 2, "склад": 2, "площадь": 1}), names={"urals"})
+    b = _f(place_population=900_000, terms=Counter({"пожар": 2, "квартира": 2, "площадь": 1}), names={"gidro"},
+           at=a.at + timedelta(minutes=10))
+    assert clustering.match_score(a, b)[0] < clustering.MATCH_THRESHOLD
+
+
+def test_title_only_aggregator_item_joins_big_city_event_same_hour():
+    ev = _f(place_population=2_900_000, lang="en", event_type="explosion",
+            terms=Counter({"explosion": 3, "heard": 1, "emergency": 1, "services": 1, "district": 1}), names={"golos"})
+    item = _f(place_population=2_900_000, lang="en", event_type="explosion", at=ev.at + timedelta(minutes=10),
+              terms=Counter({"explosion": 2, "heard": 2, "emergency": 2, "services": 2, "respond": 2}))
+    assert clustering.match_score(item, ev)[0] >= clustering.MATCH_THRESHOLD

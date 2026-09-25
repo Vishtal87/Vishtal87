@@ -70,11 +70,16 @@ def run_maintenance(once: bool) -> None:
                 (settings.raw_retention_days,)).rowcount
             c = conn.execute("DELETE FROM event_change_log WHERE changed_at < now() - interval '2 days'").rowcount
             conn.commit()
+            from geonews.pipeline.merge import merge_similar_events
+
+            m = merge_similar_events(conn)
+            if m:
+                log.info("maintenance: merged %d duplicate events", m)
             if n or p or r or c:
                 log.info("maintenance: reaped=%s purged_jobs=%s raw_payloads_dropped=%s changelog_trimmed=%s", n, p, r, c)
             if once:
                 return
-            time.sleep(60)
+            time.sleep(float(os.environ.get("GEONEWS_MAINTENANCE_INTERVAL_S", "30")))
 
 
 def run_worker(kind: str, once: bool = False) -> None:

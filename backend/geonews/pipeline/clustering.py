@@ -162,8 +162,19 @@ def match_score(article: Features, event: Features) -> tuple[float, dict]:
     s = 0.36 * ps + 0.14 * ts + 0.12 * min(cs, 1.0) + 0.08 * (cs > 1.0) + 0.24 * txt + 0.06 * nums + 0.12 * names
     if not same_lang:
         s += 0.08 * ps  # cross-lingual: place/time/type carry the decision
+    if same_type and gap_h <= 2 and txt >= 0.35:
+        s += 0.05       # same kind of incident, same place, within two hours, clearly similar wording
+    if article.names and event.names and names == 0:
+        # both name specific streets/districts and none match: likely two different incidents
+        # (decisive in big cities where a shared city name means little)
+        s -= 0.15 if ps <= 0.5 else 0.08
     return round(s, 4), {"place": round(ps, 3), "time": round(ts, 3), "category": cs, "text": round(txt, 3),
                          "numbers": round(nums, 3), "names": round(names, 3), "gap_h": round(gap_h, 1)}
+
+
+def recurring_series(sources_a: set[int], sources_b: set[int], gap_h: float) -> bool:
+    """One source's daily forecast / weekly digest: same single source, >18 h apart -> separate events."""
+    return len(sources_a) == 1 and sources_a == sources_b and gap_h > 18
 
 
 def merge_terms(event_terms: Counter, article_terms: Counter, cap: int = 120) -> Counter:

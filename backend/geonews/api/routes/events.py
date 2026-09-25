@@ -116,7 +116,7 @@ def event_detail(event_id: int, lang: str | None = None, conn: psycopg.Connectio
             "ambiguity": ev_evidence.get("ambiguity"), "point_hint": ev_evidence.get("point_hint"),
             "outliers": [{"article_id": k, "km": v} for k, v in outliers.items()],
         },
-        "sources": sources,
+        "reports": sources,
         "timeline": timeline,
         "related": [event_item(r) for r in related],
     }

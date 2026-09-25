@@ -52,17 +52,23 @@ def aggregate(
             "kind": "event", "id": r["id"], "title": r["title"], "category": r["category"], "trust": r["trust_label"],
             "sources": r["source_count"], "articles": r["article_count"], "radius_m": r["radius_m"],
             "relation": r["location_relation"], "precision": r["location_precision"],
-            "last": r["last_article_at"].isoformat(), "synthetic": r["synthetic"]}) for r in rows])
+            "last": r["last_article_at"].isoformat(), "synthetic": r["synthetic"], "place": r["geo_entity_id"]})
+            for r in rows])
 
     col = LEVEL_COL[level]
     where_bbox = bbox_sql("g.geom", boxes, params) if level == "locality" else "TRUE"
+    # big areas: put the bubble where things actually happen (robust median of event points), not at the
+    # area's label point ("Russia" in Siberia while all events are in Kuban)
+    params["median"] = level in ("continent", "country", "admin1", "admin2")
     rows = conn.execute(
         f"""
         WITH ev AS (
-          SELECT ev.{col} AS gid, ev.category, ev.last_article_at, ev.geo_entity_id, ev.synthetic
-          FROM event ev WHERE {EVENT_WHERE} AND ev.{col} IS NOT NULL
+          SELECT ev.{col} AS gid, ev.category, ev.last_article_at, ev.geo_entity_id, ev.synthetic, ev.geom
+          FROM event ev WHERE {EVENT_WHERE} AND ev.{col} IS NOT NULL AND ev.geom IS NOT NULL
         )
-        SELECT g.id, g.kind, g.name, g.names, g.population, ST_X(g.geom) lon, ST_Y(g.geom) lat,
+        SELECT g.id, g.kind, g.name, g.names, g.population,
+               ST_X(CASE WHEN %(median)s THEN ST_GeometricMedian(ST_Collect(ev.geom)) ELSE g.geom END) lon,
+               ST_Y(CASE WHEN %(median)s THEN ST_GeometricMedian(ST_Collect(ev.geom)) ELSE g.geom END) lat,
                count(*) AS n,
                count(*) FILTER (WHERE ev.geo_entity_id = g.id) AS region_wide,
                mode() WITHIN GROUP (ORDER BY ev.category) AS top_category,

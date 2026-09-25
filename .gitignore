@@ -16,3 +16,4 @@ data/geonames/
 test-results/
 playwright-report/
 .env
+frontend/public/glyphs/

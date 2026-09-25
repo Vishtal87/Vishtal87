@@ -18,7 +18,7 @@ CHILD_COL = {"continent": "country_id", "country": "admin1_id", "admin1": "local
 EVENT_LIST_COLS = """ev.id, ev.title, ev.summary, ev.lang, ev.category, ev.event_type, ev.trust_label, ev.source_count,
     ev.article_count, ev.independent_count, ev.first_seen_at, ev.last_article_at, ev.event_time, ev.is_live,
     ev.location_precision, ev.location_relation, ev.radius_m, ev.geo_entity_id, ev.synthetic, ev.source_types,
-    ST_Y(ev.geom) AS lat, ST_X(ev.geom) AS lon,
+    ST_Y(ev.geom) AS lat, ST_X(ev.geom) AS lon, %(lang)s::text AS ui_lang,
     CASE WHEN ev.lang IS DISTINCT FROM %(lang)s THEN
       (SELECT a.title FROM event_article ea JOIN article a ON a.id = ea.article_id JOIN source s ON s.id = a.source_id
         WHERE ea.event_id = ev.id AND a.lang = %(lang)s AND a.duplicate_of IS NULL
@@ -29,7 +29,8 @@ EVENT_LIST_COLS = """ev.id, ev.title, ev.summary, ev.lang, ev.category, ev.event
 def event_item(r: dict) -> dict:
     return {
         "id": r["id"], "title": r["title_local"] or r["title"], "original_title": r["title"],
-        "title_lang": r["lang"] if not r["title_local"] else None, "summary": r["summary"], "category": r["category"],
+        "title_lang": r["lang"] if (r["lang"] and r["lang"] != r["ui_lang"] and not r["title_local"]) else None,
+        "summary": r["summary"], "category": r["category"],
         "event_type": r["event_type"], "trust": r["trust_label"], "sources": r["source_count"],
         "articles": r["article_count"], "independent": r["independent_count"], "first_seen": r["first_seen_at"],
         "last_update": r["last_article_at"], "event_time": r["event_time"], "is_live": r["is_live"],
