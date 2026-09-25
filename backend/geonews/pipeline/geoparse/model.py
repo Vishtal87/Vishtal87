@@ -49,6 +49,8 @@ class Cues:
     common_word: bool = False          # dictionary says it's an ordinary word ('Мир', 'Заря')
     person_like: bool = False          # reads as a surname / first name, never as a place ('Путина', 'Дмитриев')
     strict_locative: bool = False      # "в X", "под X": unlike "у X" / "на X" never used with a person
+    acronym: bool = False              # "МИД", "ЦБ": all capitals, only a country/region may be written so ("США")
+    natural: bool = False              # "Черное море", "река Кубань": a natural feature, not the settlement
 
 
 @dataclass(slots=True)

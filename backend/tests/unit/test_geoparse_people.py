@@ -4,7 +4,7 @@ from geonews.domain.text_norm import lemma_key, norm
 from geonews.pipeline.geoparse.model import Candidate, SourceContext
 from geonews.pipeline.geoparse.resolver import geoparse
 
-RU, CN, UA, PSKOV, KUBAN, MORDOVIA = 1, 2, 3, 11, 20, 30
+RU, CN, UA, PSKOV, KUBAN, MORDOVIA, LENOBL = 1, 2, 3, 11, 20, 30, 40
 
 
 def _place(id_, kind, name, pop, imp, admin1=None, cc="RU", country=RU):
@@ -14,16 +14,22 @@ def _place(id_, kind, name, pop, imp, admin1=None, cc="RU", country=RU):
                      ancestors=anc)
 
 
+# importance on the gazetteer's scale: ~1.5 for a hamlet, ~5.5 for a city of 300k, ~9 for a country
 PLACES = [
-    _place(RU, "country", "Россия", 146_000_000, 1.0),
-    _place(CN, "country", "Китай", 1_400_000_000, 1.0, cc="CN", country=CN),
-    _place(UA, "country", "Украина", 40_000_000, 1.0, cc="UA", country=UA),
-    _place(PSKOV, "admin1", "Псковская область", 600_000, 0.7),
-    _place(KUBAN, "admin1", "Краснодарский край", 5_600_000, 0.8),
-    _place(12, "locality", "Путина", 0, 0.05, admin1=PSKOV),
-    _place(21, "locality", "Зеленский", 150, 0.05, admin1=KUBAN),
-    _place(22, "locality", "Каневская", 45_334, 0.4, admin1=KUBAN),
-    _place(31, "locality", "Лига", 40, 0.05, admin1=MORDOVIA),
+    _place(RU, "country", "Россия", 146_000_000, 9.5),
+    _place(CN, "country", "Китай", 1_400_000_000, 9.9, cc="CN", country=CN),
+    _place(UA, "country", "Украина", 40_000_000, 9.0, cc="UA", country=UA),
+    _place(PSKOV, "admin1", "Псковская область", 600_000, 6.0),
+    _place(KUBAN, "admin1", "Краснодарский край", 5_600_000, 7.0),
+    _place(12, "locality", "Путина", 0, 1.3, admin1=PSKOV),
+    _place(21, "locality", "Зеленский", 150, 1.6, admin1=KUBAN),
+    _place(22, "locality", "Каневская", 45_334, 4.6, admin1=KUBAN),
+    _place(23, "locality", "Чёрный", 500, 2.0, admin1=KUBAN),
+    _place(24, "locality", "Победа", 300, 1.9, admin1=KUBAN),
+    _place(31, "locality", "Лига", 40, 1.2, admin1=MORDOVIA),
+    _place(41, "locality", "Винницы", 100, 1.5, admin1=LENOBL),
+    _place(51, "locality", "Винница", 370_000, 5.6, cc="UA", country=UA),
+    _place(61, "locality", "Мид", 900, 2.1, cc="US", country=None),
 ]
 
 
@@ -87,3 +93,19 @@ def test_big_city_portal_is_not_hyperlocal():
     village = SourceContext(home_id=6, home_kind="locality", home_population=3_000, home_lat=45.0, home_lon=39.0)
     assert not city.hyperlocal and village.hyperlocal
     assert geoparse("Ушел из жизни известный актер", "Ему было 52 года", "ru", GAZ, city).primary is None
+
+
+def test_national_outlet_prefers_the_foreign_city_over_a_home_country_hamlet():
+    assert _where("В Виннице прогремел взрыв")[0] == 51
+
+
+def test_acronym_is_not_a_town():
+    assert 61 not in _where("Лавров обсудил с главой МИД Индии конфликты")[1]
+
+
+def test_sea_and_ordinary_word_in_a_regional_story():
+    primary, chosen = _where("Над Черным морем сбили 55 беспилотников", source=KUBAN_MEDIA)
+    assert 23 not in chosen
+    primary, chosen = _where("Музеи Кубани примут участие в проекте «Территория Победы»",
+                             "Музеи Краснодарского края станут участниками проекта", source=KUBAN_MEDIA)
+    assert 24 not in chosen and primary == KUBAN

@@ -91,5 +91,9 @@ DIRECTION_WORDS = {
 }
 # Words after which a capitalized toponym-like token is part of an organisation/person, not a place.
 # e.g. "ФК Краснодар", "клуб «Кубань»", "поезд Москва — Сочи" is handled by route logic in the resolver.
+# a name next to these is a sea, river, mountain...: "Черное море", "река Кубань", "гора Ахун" - not a settlement
+NATURAL_FEATURES = {"море", "река", "озеро", "залив", "пролив", "гора", "хребет", "мыс", "остров", "бухта", "лиман",
+                    "водохранилище", "ущелье", "перевал", "полуостров", "пустыня", "долина", "sea", "river", "lake",
+                    "bay", "gulf", "strait", "mountain", "mountains", "island", "cape", "peninsula", "desert", "valley"}
 ORG_CUES = {"фк", "клуб", "команда", "хк", "бк", "fc", "sc", "club", "team", "компания", "завод", "холдинг",
             "банк", "театр", "гостиница", "отель", "hotel", "ресторан", "кафе", "тц", "трц", "жк", "снт"}

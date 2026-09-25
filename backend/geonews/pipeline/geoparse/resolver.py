@@ -166,23 +166,29 @@ def _score(m: Mention, source: SourceContext, ctx: dict | None) -> None:
             elif c.country_id in ctx["countries"] and c.kind != "country":
                 s += 1.2
         if source.home_id:
-            if any(c.within(a) for a in (source.area_ids - set(source.home_ancestors[:2]))):
+            # the coverage area bonus is for regional/local sources; for a national outlet the "area" is the whole
+            # country, and +3.5 for every village in it beat foreign cities ('в Виннице' -> a Leningrad-oblast village)
+            if (source.home_kind not in ("country", "continent")
+                    and any(c.within(a) for a in (source.area_ids - set(source.home_ancestors[:2])))):
                 s += 3.5
             elif source.country_code and c.country_code == source.country_code:
                 s += 1.2
             if source.home_lat is not None and c.kind in ("locality", "sublocality"):
                 km = haversine_km(source.home_lat, source.home_lon, c.lat, c.lon)
                 s += max(0.0, 2.0 - math.log10(km + 1))
-        # small places named like a person or an ordinary word ('Путина', 'Самойлов', 'Лига' are all villages
-        # somewhere): accepted with a type word, an apposition or the article naming its district/region. A surname
-        # may also come with "в/под X"; the source's own region is not enough ('Зеленский' is a Kuban khutor too)
+        # small places named like a person or an ordinary word ('Путина', 'Самойлов', 'Лига', 'Победа' are all
+        # villages somewhere): accepted with a type word, an apposition or the article naming their district.
+        # A surname may also come with "в/под X". Neither the region nor the source's own area is enough: Kuban
+        # has a khutor 'Зеленский' and several 'Победа', and a regional story names the region anyway
         if c.kind in ("locality", "sublocality") and c.population < SMALL_PLACE and not cues.type_kind and not m.appos:
-            in_text_area = bool(ctx) and any(a in ctx["text_areas"] for a in (c.admin2_id, c.admin1_id) if a)
-            in_home = (source.home_kind not in (None, "continent", "country")      # a national outlet covers everything
-                       and any(c.within(a) for a in (source.area_ids - set(source.home_ancestors[:2]))))
-            if (cues.person_like and not (cues.strict_locative or in_text_area)
-                    or cues.common_word and not (in_text_area or in_home)):   # 'в Лиге наций': ordinary word
+            in_district = bool(ctx) and c.admin2_id is not None and c.admin2_id in ctx["text_areas"]
+            if (cues.person_like and not (cues.strict_locative or in_district)
+                    or cues.common_word and not in_district):
                 s -= 6.0
+        if cues.acronym and c.kind in ("locality", "sublocality"):
+            s -= 6.0          # "МИД", "ЦБ", "СНГ"
+        if cues.natural:
+            s -= 6.0          # "над Черным морем", "на реке Кубань"
         # penalties: evidence that the span is not a place reference
         if cues.common_word and not cues.locative:
             s -= 3.0

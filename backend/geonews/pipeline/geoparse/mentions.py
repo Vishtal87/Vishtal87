@@ -4,7 +4,8 @@ from __future__ import annotations
 import re
 
 from geonews.domain.settlement_lexicon import (
-    ABBREVIATIONS_NEED_DOT, DIRECTION_WORDS, DISTANCE_UNITS, NEAR_CUES, ORG_CUES, POSTPOSITIVE_OK, TYPE_WORDS,
+    ABBREVIATIONS_NEED_DOT, DIRECTION_WORDS, DISTANCE_UNITS, NATURAL_FEATURES, NEAR_CUES, ORG_CUES, POSTPOSITIVE_OK,
+    TYPE_WORDS,
 )
 from geonews.domain.text_norm import (Token, ngram_keys, script_of, token_lemmas, tokenize, word_is_common_noun,
                                       word_is_person_name)
@@ -180,6 +181,7 @@ def _cues(text: str, toks: list[Token], i: int, j: int, lang: str | None, first_
         if p.norm in LOCATIVE_PREPS or (len(prev) >= 2 and prev[-2].norm in LOCATIVE_PREPS and c.type_kind):
             c.locative = True
         c.strict_locative = p.norm in STRICT_LOCATIVE_PREPS
+        c.natural = lem in NATURAL_FEATURES or p.norm in NATURAL_FEATURES
         # "Джордж Вашингтон", "Иван Краснодаров": capitalized word right before, same sentence, not a type word
         if (p.capitalized and not tw and p.norm not in STOPWORDS and i - 1 not in first_of_sentence
                 and _adjacent(text, p, t0) and p.norm not in NAME_CONNECTORS):
@@ -188,6 +190,7 @@ def _cues(text: str, toks: list[Token], i: int, j: int, lang: str | None, first_
         nx = toks[j + 1]
         if _adjacent(text, toks[j], nx):
             lem = token_lemmas(nx.norm, lang)[0] if lang else nx.norm
+            c.natural = c.natural or lem in NATURAL_FEATURES or nx.norm in NATURAL_FEATURES
             tw = TYPE_WORDS.get(lem) or TYPE_WORDS.get(nx.norm)
             if tw and (lem in POSTPOSITIVE_OK or nx.norm in POSTPOSITIVE_OK or tw[0] == "street"):
                 if tw[0] == "street":
@@ -242,6 +245,7 @@ def _cues(text: str, toks: list[Token], i: int, j: int, lang: str | None, first_
         c.org = True
 
     # common word check (ru/uk dictionary) for single-token spans without a type cue
+    c.acronym = i == j and len(t0.text) <= 6 and t0.text.isupper() and t0.text.isalpha()
     if i == j and lang and c.type_kind is None:
         c.common_word = word_is_common_noun(t0.norm, lang)
         c.person_like = word_is_person_name(t0.norm, lang)
