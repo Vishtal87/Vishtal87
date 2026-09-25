@@ -32,8 +32,9 @@ case "$cmd" in
     cli import-geonames "${@:-RU}" --download ;;
   verify-sources)
     # runs as the invoking user so the result file in backend/config belongs to them
-    "${DC[@]}" run --rm --no-deps --user "$(id -u):$(id -g)" -v "$PWD/backend/config:/app/backend/config" setup \
-      python -m geonews.cli check-sources sources.ru.candidates.yaml --out /app/backend/config/sources.ru.yaml
+    # backend/config is mounted read-only into the services; the result goes through a separate writable mount
+    "${DC[@]}" run --rm --no-deps --user "$(id -u):$(id -g)" -v "$PWD/backend/config:/out" setup \
+      python -m geonews.cli check-sources sources.ru.candidates.yaml --out /out/sources.ru.yaml
     echo "review backend/config/sources.ru.yaml, then: scripts/prod.sh up" ;;
   up)
     src="backend/config/${GEONEWS_SOURCES:-sources.ru.yaml}"

@@ -21,3 +21,4 @@ frontend/public/glyphs/
 # production secrets and database dumps
 .env
 backups/
+.geonames-*.done
