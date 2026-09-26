@@ -172,6 +172,7 @@ def event_members(conn: psycopg.Connection, event_id: int) -> list[dict]:
     return conn.execute(
         """SELECT a.id, a.title, a.excerpt, a.lang, a.published_at, a.fetched_at, a.event_time, a.is_live, a.category,
                   a.origin_group_id, a.duplicate_of, a.source_id, s.source_type, s.trust_tier, s.synthetic,
+                  coalesce(s.config->>'publisher', s.slug) AS publisher,
                   al.geo_entity_id AS loc_id, al.precision AS loc_precision, al.confidence AS loc_conf,
                   al.relation AS loc_relation, al.distance_km AS loc_radius,
                   ST_Y(al.geom) AS loc_lat, ST_X(al.geom) AS loc_lon,

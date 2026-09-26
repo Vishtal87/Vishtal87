@@ -104,6 +104,9 @@ def test_forwards_of_one_post_are_one_independent_source():
     t2 = trust_label(reps + [Report(20, "media", 2, 90)])
     assert t2["label"] == "multiple_sources" and t2["independent_count"] == 2
     assert trust_label([Report(1, "official", 1, 5)])["label"] == "official"
+    # an outlet's site feed and its Telegram channel are one voice
+    same = [Report(1, "media", 2, 5, publisher="ria"), Report(2, "telegram", 2, 6, publisher="ria")]
+    assert trust_label(same)["label"] == "single_source"
     assert trust_label([Report(1, "ugc", 4, 5)])["label"] == "unverified"
 
 

@@ -81,14 +81,19 @@ def main(argv: list[str] | None = None) -> None:
 
         from geonews.ingestion.fetcher import Fetcher
         from geonews.ingestion.registry import read_registry
-        from geonews.ingestion.verify import check_candidate, verified_entry
+        from geonews.ingestion.verify import check_candidate, derived_telegram, verified_entry
 
         previous = {}
         if args.keep_previous and args.out and Path(args.out).exists():
             previous = {s["slug"]: s for s in read_registry(args.out)}
         fetcher, ok = Fetcher(), []
-        for spec in read_registry(args.file):
+        queue = read_registry(args.file)
+        slugs = {s["slug"] for s in queue}
+        for spec in queue:          # grows while iterating: channels found on the candidates' own sites
             chk = check_candidate(spec, fetcher)
+            if chk.telegram and spec.get("homepage") and f"{spec['slug']}-tg" not in slugs:
+                queue.append(derived_telegram(spec, chk.telegram[0]))
+                slugs.add(queue[-1]["slug"])
             status = "OK   " if chk.ok else ("KEEP " if spec["slug"] in previous else "FAIL ")
             detail = f"{chk.entries} items, newest {chk.age_h} h ago -> {chk.url}" if chk.url else ""
             print(f"{status}{spec['slug']:<28} {detail} {chk.error or ''}".rstrip(), flush=True)
@@ -96,6 +101,9 @@ def main(argv: list[str] | None = None) -> None:
                 ok.append(verified_entry(spec, chk))
             elif spec["slug"] in previous:
                 ok.append(previous[spec["slug"]])
+        done = {s["slug"] for s in ok}
+        ok += [s for slug, s in previous.items()          # a site that was down this time: keep its channel too
+               if slug not in done and slug not in slugs and s.get("derived_from") in slugs]
         print(f"verified {len(ok)} sources")
         if not ok:
             raise SystemExit("nothing verified, no registry written (network access? robots.txt? feed URLs?)")

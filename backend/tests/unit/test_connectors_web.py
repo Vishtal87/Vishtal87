@@ -171,3 +171,54 @@ def test_listing_polls_are_polite():
     CONNECTORS["html_list"].fetch(src, f)
     second = [h for h in hits if h.startswith("/news/")][len(first):]
     assert len(second) == 6 and not set(second) & set(first)  # rejected pages are not fetched again
+
+
+def _tg_page(title: str, when: datetime) -> str:
+    return (f'<html><head><meta property="og:title" content="{title}"></head><body>'
+            f'<div class="tgme_channel_info_header_title"><span>{title}</span></div>'
+            f'<div class="tgme_widget_message" data-post="kubnews/101"><div class="tgme_widget_message_text">'
+            f'Пожар в Динской<br>На место прибыли пять расчётов</div>'
+            f'<a class="tgme_widget_message_date" href="https://t.me/kubnews/101"><time datetime="{when.isoformat()}"></time></a>'
+            f'</div></body></html>')
+
+
+def test_outlet_channel_found_on_its_site_is_checked_and_kept_with_its_publisher(tmp_path):
+    import yaml
+
+    from geonews import cli
+    from geonews.ingestion import verify
+
+    home = '<html><head></head><body><a href="https://t.me/kubnews">Мы в Telegram</a>' + LISTING[12:]
+    pages = {"/": (200, home), "/news/2026/09/sklad-v-dinskoy": (200, _article("Склад", NOW)),
+             "/s/kubnews": (200, _tg_page("Кубанские новости", NOW))}
+
+    def fake_fetcher():
+        f, _ = _fetcher(pages)
+        return f
+    cand = tmp_path / "cand.yaml"
+    cand.write_text(yaml.safe_dump({"sources": [{"slug": "kubnews", "name": "Кубанские новости", "type": "regional_media",
+                                                 "access_model": "public_feed", "homepage": "https://news.test/"}]}))
+    out = tmp_path / "out.yaml"
+    import geonews.ingestion.fetcher as fetcher_mod
+    orig = fetcher_mod.Fetcher
+    try:
+        fetcher_mod.Fetcher = fake_fetcher   # the CLI builds its own Fetcher; all hosts answer from `pages`
+        cli.main(["check-sources", str(cand), "--out", str(out)])
+    finally:
+        fetcher_mod.Fetcher = orig
+    got = {s["slug"]: s for s in yaml.safe_load(out.read_text())["sources"]}
+    assert set(got) == {"kubnews", "kubnews-tg"}
+    tg = got["kubnews-tg"]
+    assert tg["url"] == "https://t.me/s/kubnews" and tg["connector"] == "telegram_public"
+    assert tg["config"]["publisher"] == "kubnews" and tg["derived_from"] == "kubnews"
+    assert verify.telegram_channels(home) == ["kubnews"]
+
+
+def test_channel_with_an_unexpected_name_is_rejected():
+    from geonews.ingestion.verify import check_candidate
+
+    f, _ = _fetcher({"/s/rian_ru": (200, _tg_page("Фейковые новости", NOW))})
+    spec = {"slug": "tg-ria", "connector": "telegram_public", "url": "https://t.me/s/rian_ru",
+            "config": {"expect_title": "РИА"}}
+    chk = check_candidate(spec, f)
+    assert not chk.ok and "expected" in chk.error

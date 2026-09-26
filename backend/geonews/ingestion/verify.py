@@ -24,6 +24,8 @@ FEED_TYPES = ("application/rss+xml", "application/atom+xml")
 COMMON_PATHS = ("/rss", "/rss.xml", "/rss/", "/feed", "/feed/")
 MAX_AGE_DAYS = 14          # newest item older than this: the source is considered stale
 _LINK = re.compile(r"<link\b[^>]*>", re.IGNORECASE)
+_TG_LINK = re.compile(r"""href\s*=\s*["']?(?:https?:)?//(?:t\.me|telegram\.me)/(?!s/|share|joinchat|addstickers|proxy|iv\b|\+)"""
+                      r"""([A-Za-z][A-Za-z0-9_]{4,31})/?["'?#\s>]""", re.IGNORECASE)
 _ATTR = re.compile(r"""([a-zA-Z-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))""")
 
 
@@ -40,6 +42,25 @@ def discover_feeds(page_html: str, base_url: str) -> list[str]:
     return out
 
 
+def telegram_channels(page_html: str) -> list[str]:
+    """Public Telegram channels a site links to (its official channel is usually in the header or footer)."""
+    out: list[str] = []
+    for name in _TG_LINK.findall(page_html):
+        if name.lower() not in (n.lower() for n in out):
+            out.append(name)
+    return out
+
+
+def derived_telegram(spec: dict, channel: str) -> dict:
+    """Candidate for the Telegram channel an outlet links to from its own site: same home, same publisher."""
+    return {k: v for k, v in spec.items() if k in ("languages", "country", "timezone", "home", "trust_tier")} | {
+        "slug": f"{spec['slug']}-tg", "name": f"{spec['name']} — Telegram", "type": "telegram",
+        "connector": "telegram_public", "access_model": "public_web", "url": f"https://t.me/s/{channel}",
+        "poll_interval": 300, "trust_tier": spec.get("trust_tier", 2), "derived_from": spec["slug"],
+        "config": {"publisher": spec["slug"]},
+        "legal_note": f"official channel linked from {spec.get('homepage') or spec.get('url')}"}
+
+
 @dataclass
 class Check:
     slug: str
@@ -50,6 +71,7 @@ class Check:
     error: str | None = None
     connector: str = "rss"
     tried: list[str] = field(default_factory=list)
+    telegram: list[str] = field(default_factory=list)     # channels the homepage links to
 
     @property
     def age_h(self) -> float | None:
@@ -61,11 +83,12 @@ SITEMAP_PATHS = ("/sitemap-news.xml", "/news-sitemap.xml", "/sitemap_news.xml", 
 CHECK_ARTICLES = 2   # page-based connectors fetch this many articles while checking (proves extraction works)
 
 
-def _attempts(spec: dict, fetcher: Fetcher, robots: bool) -> list[tuple[str, str]]:
+def _attempts(spec: dict, fetcher: Fetcher, robots: bool, chk: Check) -> list[tuple[str, str]]:
     """(connector, url) to try, best first: feeds, then news sitemaps, then the homepage as a news listing."""
     if spec.get("url"):
         return [(spec.get("connector", "rss"), spec["url"])]
     page = fetcher.get(spec["homepage"], respect_robots=robots)
+    chk.telegram = telegram_channels(page.text)
     feeds = discover_feeds(page.text, page.url)
     feeds += [u for u, _ in same_site_links(page.text, page.url)
               if re.search(r"rss|feed|\.xml$", u, re.IGNORECASE) and u not in feeds][:4]   # "RSS" links on the page
@@ -81,7 +104,7 @@ def check_candidate(spec: dict, fetcher: Fetcher) -> Check:
     chk = Check(slug=spec["slug"])
     robots = respects_robots(spec)
     try:
-        attempts = _attempts(spec, fetcher, robots)
+        attempts = _attempts(spec, fetcher, robots, chk)
     except Exception as e:  # noqa: BLE001 - report every failure, never abort the whole run
         chk.error = f"homepage: {e}"
         return chk
@@ -99,6 +122,12 @@ def check_candidate(spec: dict, fetcher: Fetcher) -> Check:
         except Exception as e:  # noqa: BLE001
             errors.append(f"{url}: {e}")
             continue
+        expected = (spec.get("config") or {}).get("expect_title")
+        if expected and res.entries:
+            title = (res.entries[0].extra or {}).get("channel_title") or ""
+            if not any(x.casefold() in title.casefold() for x in ([expected] if isinstance(expected, str) else expected)):
+                errors.append(f"{url}: channel is '{title}', expected {expected}")
+                continue
         dates = [parse_published(e.published, spec.get("timezone"))[0] for e in res.entries if e.published]
         cand = (len(res.entries), max(dates) if dates else None, url, kind)
         if res.entries and (best is None or (cand[1] or datetime.min.replace(tzinfo=UTC))

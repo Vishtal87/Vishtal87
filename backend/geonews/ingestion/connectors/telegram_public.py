@@ -10,8 +10,16 @@ from geonews.ingestion.entry import RawEntry
 from geonews.ingestion.fetcher import Fetcher
 
 
+def channel_title(doc) -> str:
+    """The channel's display name as the page shows it ('РИА Новости')."""
+    t = doc.xpath("//div[contains(@class,'tgme_channel_info_header_title')]//text()") or \
+        doc.xpath("//meta[@property='og:title']/@content")
+    return " ".join("".join(t).split())
+
+
 def parse_preview(html: str, channel_url: str) -> list[RawEntry]:
     doc = lxml.html.fromstring(html)
+    title = channel_title(doc)
     out = []
     for msg in doc.xpath("//div[contains(concat(' ', normalize-space(@class), ' '), ' tgme_widget_message ')][@data-post]"):
         post = msg.get("data-post")                      # "channel/123"
@@ -32,7 +40,8 @@ def parse_preview(html: str, channel_url: str) -> list[RawEntry]:
             external_id=post, url=link[0] if link else f"{channel_url.rstrip('/')}/{post.split('/')[-1]}",
             title=first_line[:200], body_text=body_text[len(first_line):].strip() or body_text,
             body_html=body_html, published=times[0] if times else None,
-            media="video" if has_video else "text", extra={"forwarded_from": fwd[0] if fwd else None},
+            media="video" if has_video else "text",
+            extra={"forwarded_from": fwd[0] if fwd else None, "channel_title": title},
             raw=lxml.html.tostring(msg, encoding="unicode")[:8000],
         ))
     return out

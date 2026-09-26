@@ -17,13 +17,14 @@ class Report:
     trust_tier: int
     origin_group_id: int | None
     is_copy: bool = False       # forward/repost of another article (duplicate_of set)
+    publisher: str | None = None  # one outlet's channels (site RSS + its Telegram) are one voice, not two
 
 
 def trust_label(reports: list[Report]) -> dict:
     sources = {r.source_id for r in reports}
     # independent = sources that published at least one ORIGINAL text (a channel that only forwarded
     # someone else's post adds reach, not confirmation)
-    independent = len({r.source_id for r in reports if not r.is_copy})
+    independent = len({r.publisher or r.source_id for r in reports if not r.is_copy})
     has_official = any((r.source_type == "official" or r.trust_tier == 1) and not r.is_copy for r in reports)
     if has_official:
         label = "official"

@@ -1,4 +1,4 @@
-# CANDIDATE sources: Krasnodar Krai first, then federal Russian media.
+# CANDIDATE sources: Krasnodar Krai first, then federal Russian media and their Telegram channels, then the world.
 #
 # Do not load this file directly (on the server `scripts/prod.sh verify-sources` does all of this):
 #   geonews check-sources sources.ru.candidates.yaml --out config/sources.ru.yaml
@@ -13,6 +13,9 @@ x-kuban: &kuban {access_model: public_feed, languages: [ru], country: RU, timezo
                  home: {q: "Краснодарский край", cc: RU, kind: admin1}}
 x-ru: &ru {access_model: public_feed, languages: [ru], country: RU, timezone: Europe/Moscow, poll_interval: 300,
            home: {q: "Россия", cc: RU, kind: country}}
+x-tg: &tg {type: telegram, connector: telegram_public, access_model: public_web, trust_tier: 2, languages: [ru], country: RU,
+           timezone: Europe/Moscow, poll_interval: 300, home: {q: "Россия", cc: RU, kind: country}}
+x-world: &world {type: media, connector: rss, access_model: public_feed, poll_interval: 600}
 
 sources:
   # ---- Krasnodar Krai: regional media (feed URL found by autodiscovery) ----
@@ -56,3 +59,63 @@ sources:
   - {<<: *ru, slug: gdelt-ru, name: "GDELT — русскоязычные материалы", type: aggregator, connector: gdelt,
      access_model: official_api, poll_interval: 900, url: "https://api.gdeltproject.org/api/v2/doc/doc",
      config: {query: "sourcelang:russian", maxrecords: 75}}
+
+  # ---- Telegram: official public channels of federal media (web preview t.me/s/<channel>, no login) ----
+  # expect_title: the channel must be called so (guards against look-alike channels); publisher: the same outlet's
+  # site feed and channel are one voice for the "multiple sources" label. Kuban outlets' own channels are found
+  # automatically by check-sources from the links on their sites (<slug>-tg).
+  - {<<: *tg, slug: tg-ria, name: "РИА Новости — Telegram", url: "https://t.me/s/rian_ru",
+     config: {expect_title: "РИА", publisher: ria}}
+  - {<<: *tg, slug: tg-tass, name: "ТАСС — Telegram", url: "https://t.me/s/tass_agency", config: {expect_title: "ТАСС", publisher: tass}}
+  - {<<: *tg, slug: tg-rbc, name: "РБК — Telegram", url: "https://t.me/s/rbc_news", config: {expect_title: "РБК", publisher: rbc}}
+  - {<<: *tg, slug: tg-kommersant, name: "Коммерсантъ — Telegram", url: "https://t.me/s/kommersant",
+     config: {expect_title: "Коммерсант", publisher: kommersant}}
+  - {<<: *tg, slug: tg-izvestia, name: "Известия — Telegram", url: "https://t.me/s/izvestia", config: {expect_title: "Известия"}}
+  - {<<: *tg, slug: tg-interfax, name: "Интерфакс — Telegram", url: "https://t.me/s/interfaxonline",
+     config: {expect_title: "Интерфакс", publisher: interfax}}
+  - {<<: *tg, slug: tg-mchs, name: "МЧС России — Telegram", type: official, trust_tier: 1, url: "https://t.me/s/mchs_official",
+     config: {expect_title: "МЧС", publisher: mchs-rf}}
+  - {<<: *tg, slug: tg-mash, name: "Mash — Telegram", trust_tier: 3, url: "https://t.me/s/breakingmash", config: {expect_title: "Mash"}}
+  - {<<: *tg, slug: tg-shot, name: "SHOT — Telegram", trust_tier: 3, url: "https://t.me/s/shot_shot", config: {expect_title: "SHOT"}}
+  - {<<: *tg, slug: tg-baza, name: "Baza — Telegram", trust_tier: 3, url: "https://t.me/s/bazabazon", config: {expect_title: "Baza"}}
+
+  # ---- World media (RSS published by the outlets). Some are blocked in Russia: the server verifies from where it
+  # stands, so those only work on a collector outside Russia; their headlines still come through GDELT below ----
+  - {<<: *world, slug: bbc-world, name: "BBC News — World", url: "https://feeds.bbci.co.uk/news/world/rss.xml",
+     languages: [en], country: GB}
+  - {<<: *world, slug: bbc-russian, name: "BBC News — Русская служба", url: "https://feeds.bbci.co.uk/russian/rss.xml",
+     languages: [ru], country: GB}
+  - {<<: *world, slug: dw-world, name: "DW — World", url: "https://rss.dw.com/xml/rss-en-world", languages: [en], country: DE}
+  - {<<: *world, slug: dw-russian, name: "DW на русском", url: "https://rss.dw.com/xml/rss-ru-all", languages: [ru], country: DE}
+  - {<<: *world, slug: guardian-world, name: "The Guardian — World", url: "https://www.theguardian.com/world/rss",
+     languages: [en], country: GB}
+  - {<<: *world, slug: nyt-world, name: "The New York Times — World", url: "https://rss.nytimes.com/services/xml/rss/nyt/World.xml",
+     languages: [en], country: US}
+  - {<<: *world, slug: npr-world, name: "NPR — World", url: "https://feeds.npr.org/1004/rss.xml", languages: [en], country: US}
+  - {<<: *world, slug: sky-world, name: "Sky News — World", url: "https://feeds.skynews.com/feeds/rss/world.xml",
+     languages: [en], country: GB}
+  - {<<: *world, slug: aljazeera, name: "Al Jazeera English", url: "https://www.aljazeera.com/xml/rss/all.xml",
+     languages: [en], country: QA}
+  - {<<: *world, slug: france24, name: "France 24 — English", url: "https://www.france24.com/en/rss", languages: [en], country: FR}
+  - {<<: *world, slug: euronews-ru, name: "Euronews по-русски", homepage: "https://ru.euronews.com/", languages: [ru], country: FR}
+  - {<<: *world, slug: cgtn-world, name: "CGTN — World", url: "https://www.cgtn.com/subscribe/rss/section/world.xml",
+     languages: [en], country: CN}
+  - {<<: *world, slug: anadolu, name: "Anadolu Agency — World", url: "https://www.aa.com.tr/en/rss/default?cat=world",
+     languages: [en], country: TR}
+  - {<<: *world, slug: tagesschau, name: "tagesschau.de", url: "https://www.tagesschau.de/index~rss2.xml", languages: [de],
+     country: DE, home: {q: "Germany", cc: DE, kind: country}}
+  - {<<: *world, slug: lemonde, name: "Le Monde — À la une", url: "https://www.lemonde.fr/rss/une.xml", languages: [fr],
+     country: FR, home: {q: "France", cc: FR, kind: country}}
+
+  # ---- disasters worldwide with exact coordinates (georss) ----
+  - {<<: *world, slug: usgs-quakes, name: "USGS — землетрясения M2.5+", type: official, trust_tier: 1, poll_interval: 600,
+     url: "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.atom", languages: [en], country: US}
+  - {<<: *world, slug: gdacs, name: "GDACS — оповещения о бедствиях", type: official, trust_tier: 1, poll_interval: 900,
+     url: "https://www.gdacs.org/xml/rss.xml", languages: [en]}
+
+  # ---- GDELT: headlines + links of major world outlets (incl. those blocked in Russia and those without RSS such as
+  # Reuters and AP). The server talks to GDELT only, never to the outlets; readers open the originals themselves ----
+  - {slug: gdelt-world, name: "GDELT — крупные мировые СМИ", type: aggregator, connector: gdelt, access_model: official_api,
+     poll_interval: 900, url: "https://api.gdeltproject.org/api/v2/doc/doc", languages: [en],
+     config: {maxrecords: 75, query: "(domainis:reuters.com OR domainis:apnews.com OR domainis:bbc.com OR domainis:bbc.co.uk OR domainis:dw.com OR domainis:theguardian.com OR domainis:nytimes.com OR domainis:cnn.com OR domainis:aljazeera.com OR domainis:france24.com)"},
+     legal_note: "titles and links only, from the GDELT open API; some outlets are blocked in Russia"}
