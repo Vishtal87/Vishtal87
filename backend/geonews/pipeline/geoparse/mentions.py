@@ -245,7 +245,9 @@ def _cues(text: str, toks: list[Token], i: int, j: int, lang: str | None, first_
         c.org = True
 
     # common word check (ru/uk dictionary) for single-token spans without a type cue
-    c.acronym = i == j and len(t0.text) <= 6 and t0.text.isupper() and t0.text.isalpha()
+    # "МИД", "ЦБ" (not "ВЗРЫВ В СОЧИ: ПОСТРАДАЛИ": in an all-caps headline every word is in capitals)
+    caps_around = sum(1 for t in toks[max(0, i - 3):i] + toks[j + 1:j + 4] if len(t.text) >= 4 and t.text.isupper())
+    c.acronym = i == j and len(t0.text) <= 6 and t0.text.isupper() and t0.text.isalpha() and not caps_around
     if i == j and lang and c.type_kind is None:
         c.common_word = word_is_common_noun(t0.norm, lang)
         c.person_like = word_is_person_name(t0.norm, lang)

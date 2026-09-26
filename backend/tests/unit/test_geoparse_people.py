@@ -30,6 +30,7 @@ PLACES = [
     _place(41, "locality", "Винницы", 100, 1.5, admin1=LENOBL),
     _place(51, "locality", "Винница", 370_000, 5.6, cc="UA", country=UA),
     _place(61, "locality", "Мид", 900, 2.1, cc="US", country=None),
+    _place(71, "locality", "Сочи", 443_000, 5.6, admin1=KUBAN),
 ]
 
 
@@ -101,6 +102,8 @@ def test_national_outlet_prefers_the_foreign_city_over_a_home_country_hamlet():
 
 def test_acronym_is_not_a_town():
     assert 61 not in _where("Лавров обсудил с главой МИД Индии конфликты")[1]
+    assert 61 not in _where("Заявление МИД США о переговорах")[1]
+    assert _where("⚡️ВЗРЫВ В СОЧИ: ПОСТРАДАЛИ ДВА ЧЕЛОВЕКА", source=KUBAN_MEDIA)[0] == 71
 
 
 def test_sea_and_ordinary_word_in_a_regional_story():
