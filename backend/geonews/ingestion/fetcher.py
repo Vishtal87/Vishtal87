@@ -48,12 +48,13 @@ class Fetcher:
     def close(self) -> None:
         self.client.close()
 
-    def _throttle(self, host: str) -> None:
-        with self._lock:
-            wait = self._last_hit.get(host, 0) + self.min_interval_s - time.monotonic()
-            if wait > 0:
-                time.sleep(wait)
-            self._last_hit[host] = time.monotonic()
+    def _throttle(self, host: str, interval: float) -> None:
+        with self._lock:              # reserve this host's next slot; the wait happens outside, other hosts go on
+            now = time.monotonic()
+            start = max(now, self._last_hit.get(host, 0) + interval)
+            self._last_hit[host] = start
+        if start > now:
+            time.sleep(start - now)
 
     def allowed(self, url: str) -> bool:
         p = urlsplit(url)
@@ -90,11 +91,12 @@ class Fetcher:
                 else f"disallowed by robots.txt: {url}")
 
     def get(self, url: str, etag: str | None = None, last_modified: str | None = None,
-            respect_robots: bool = True, timeout: float | None = None) -> Response:
+            respect_robots: bool = True, timeout: float | None = None, min_interval: float = 0.0) -> Response:
+        """`min_interval`: a longer gap between requests to this host, for APIs that ask for one (GDELT: 5 s)."""
         if respect_robots and not self.allowed(url):
             raise FetchError(self._robots_refusal(url))
         host = urlsplit(url).netloc
-        self._throttle(host)
+        self._throttle(host, max(self.min_interval_s, min_interval))
         headers = {}
         if etag:
             headers["If-None-Match"] = etag

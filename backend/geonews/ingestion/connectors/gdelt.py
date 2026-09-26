@@ -22,8 +22,10 @@ class GdeltConnector:
         cfg = source.get("config") or {}
         q = urlencode({"query": cfg.get("query", "sourcelang:eng"), "mode": "artlist", "format": "json",
                        "maxrecords": cfg.get("maxrecords", 75), "sort": "datedesc"})
-        # GDELT is slow under load (20-40 s is common): a longer timeout than for news sites
-        r = fetcher.get(f"{source['url']}?{q}", respect_robots=False, timeout=float(cfg.get("timeout", 45)))
+        # GDELT is slow under load (20-40 s is common): a longer timeout than for news sites; it asks for no more
+        # than one request every 5 seconds (several GDELT sources share the host)
+        r = fetcher.get(f"{source['url']}?{q}", respect_robots=False, timeout=float(cfg.get("timeout", 45)),
+                        min_interval=float(cfg.get("min_interval", 6)))
         try:
             data = json.loads(r.text or "{}")
         except json.JSONDecodeError as e:

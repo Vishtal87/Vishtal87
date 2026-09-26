@@ -34,3 +34,19 @@ def test_robots_rules_are_obeyed():
     f = _fetcher(200, "User-agent: *\nDisallow: /private/\n")
     assert f.allowed("https://example.org/feed.xml")
     assert not f.allowed("https://example.org/private/feed.xml")
+
+
+def test_api_asking_for_a_longer_gap_gets_it():
+    import time
+
+    import httpx
+
+    from geonews.ingestion.fetcher import Fetcher
+
+    f = Fetcher(min_interval_s=0)
+    f.client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200, text="{}")))
+    t0 = time.monotonic()
+    f.get("https://api.test/a", respect_robots=False, min_interval=0.3)
+    f.get("https://api.test/b", respect_robots=False, min_interval=0.3)
+    f.get("https://other.test/c", respect_robots=False)          # another host does not wait
+    assert 0.3 <= time.monotonic() - t0 < 0.6
