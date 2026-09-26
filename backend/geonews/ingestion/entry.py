@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 
 
 @dataclass
@@ -19,6 +19,7 @@ class RawEntry:
     lat: float | None = None             # geotag provided by the source (georss, etc.)
     lon: float | None = None
     lang: str | None = None              # declared language (feed-level)
+    image: str | None = None             # preview picture the publisher attached (enclosure, og:image, post photo)
     extra: dict = field(default_factory=dict)
     raw: str = ""                        # original payload fragment (XML/HTML/JSON), retention-limited
 
@@ -32,4 +33,6 @@ class RawEntry:
 
     @staticmethod
     def from_payload(s: str) -> "RawEntry":
-        return RawEntry(**json.loads(s))
+        # fields this version does not know are ignored: a rollback must still read items stored by a newer one
+        known = {f.name for f in fields(RawEntry)}
+        return RawEntry(**{k: v for k, v in json.loads(s).items() if k in known})

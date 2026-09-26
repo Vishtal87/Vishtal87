@@ -4,7 +4,7 @@ import { api } from '../../api/client'
 import type { Category, EventDetail } from '../../api/types'
 import { useFetch } from '../../app/useFetch'
 import { Icon, SOURCE_ICON } from '../../design/icons'
-import { CategoryDot, DemoTag, ErrorState, EventRow, IconButton, Skeleton, TrustBadge } from '../../design/ui'
+import { CategoryDot, DemoTag, ErrorState, EventRow, IconButton, Picture, Skeleton, TrustBadge } from '../../design/ui'
 import { useI18n } from '../../i18n'
 import { clock, dateTime, hostOf, relTime } from '../../util/format'
 
@@ -54,6 +54,7 @@ export function EventCard(p: Props) {
 
       {d ? (
         <div className="panel__scroll">
+          <Picture src={d.image} className="event-card__hero" />
           <dl className="facts">
             <div>
               <dt><Icon name="pin" size={16} /></dt>

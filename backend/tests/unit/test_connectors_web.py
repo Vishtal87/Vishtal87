@@ -247,3 +247,28 @@ def test_channel_with_an_unexpected_name_is_rejected():
             "config": {"expect_title": "РИА"}}
     chk = check_candidate(spec, f)
     assert not chk.ok and "expected" in chk.error
+
+
+def test_preview_pictures_come_from_what_the_publisher_attached():
+    from geonews.ingestion.connectors.article import fetch_article, image_url
+    from geonews.ingestion.connectors.telegram_public import parse_preview
+
+    feed = ('<?xml version="1.0"?><rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/"><channel><title>t</title>'
+            '<item><title>A</title><link>https://a.test/1</link><guid>1</guid>'
+            '<enclosure url="https://a.test/i.jpg" type="image/jpeg" length="1"/></item>'
+            '<item><title>B</title><link>https://a.test/2</link><guid>2</guid>'
+            '<media:content url="https://a.test/v.mp4" medium="video"/><media:content url="https://a.test/m.jpg" medium="image"/></item>'
+            '<item><title>C</title><link>https://a.test/x/3</link><guid>3</guid>'
+            '<description>&lt;img src="/counter.gif"&gt;&lt;img src="/pic.jpg"&gt; текст</description></item>'
+            '<item><title>D</title><link>https://a.test/4</link><guid>4</guid><description>без картинки</description></item>'
+            '</channel></rss>')
+    assert [e.image for e in parse_feed(feed)[0]] == ["https://a.test/i.jpg", "https://a.test/m.jpg",
+                                                       "https://a.test/pic.jpg", None]
+    post = ('<div class="tgme_widget_message" data-post="c/1"><a class="tgme_widget_message_photo_wrap" '
+            "style=\"width:800px;background-image:url('https://cdn.test/file/abc.jpg')\"></a>"
+            '<div class="tgme_widget_message_text">Пожар<br>текст</div></div>')
+    assert parse_preview(post, "https://t.me/s/c")[0].image == "https://cdn.test/file/abc.jpg"
+    page = _article("Склад", NOW).replace("</head>", '<meta property="og:image" content="/img/sklad.jpg"></head>')
+    f, _ = _fetcher({"/a": (200, page)})
+    assert fetch_article(f, "https://news.test/a").image == "https://news.test/img/sklad.jpg"
+    assert image_url("javascript:alert(1)") is None and image_url("/logo.png", "https://x.test/") is None

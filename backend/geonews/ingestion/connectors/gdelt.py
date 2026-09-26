@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from urllib.parse import urlencode
 
+from geonews.ingestion.connectors.article import image_url
 from geonews.ingestion.connectors.base import FetchResult
 from geonews.ingestion.entry import RawEntry
 from geonews.ingestion.fetcher import FetchError, Fetcher
@@ -32,7 +33,7 @@ class GdeltConnector:
             sd = a.get("seendate", "")
             iso = f"{sd[0:4]}-{sd[4:6]}-{sd[6:8]}T{sd[9:11]}:{sd[11:13]}:{sd[13:15]}Z" if len(sd) >= 15 else None
             out.append(RawEntry(external_id=a["url"], url=a["url"], title=a.get("title", ""), published=iso,
-                                lang=LANGS.get(a.get("language", "")), extra={"domain": a.get("domain"),
-                                                                              "sourcecountry": a.get("sourcecountry")},
+                                lang=LANGS.get(a.get("language", "")), image=image_url(a.get("socialimage")),
+                                extra={"domain": a.get("domain"), "sourcecountry": a.get("sourcecountry")},
                                 raw=json.dumps(a, ensure_ascii=False)))
         return FetchResult(entries=out)

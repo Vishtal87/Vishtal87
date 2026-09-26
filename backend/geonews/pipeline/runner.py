@@ -134,7 +134,7 @@ class Processor:
             "excerpt": normalize.excerpt(body or title), "lang": lang, "lang_confidence": lang_conf,
             "published_at": published, "published_tz_assumed": tz_assumed, "event_time": et.at, "is_live": live,
             "content_hash": chash, "simhash": sh, "sh_b0": b[0], "sh_b1": b[1], "sh_b2": b[2], "sh_b3": b[3],
-            "category": cls.category, "status": "processed",
+            "category": cls.category, "status": "processed", "image_url": normalize.safe_url(entry.image),
         }
         old_event = None
         if existing:

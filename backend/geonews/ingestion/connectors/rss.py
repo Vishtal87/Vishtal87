@@ -3,9 +3,21 @@ from __future__ import annotations
 
 import feedparser
 
+from geonews.ingestion.connectors.article import first_image, image_url
 from geonews.ingestion.connectors.base import FetchResult, respects_robots
 from geonews.ingestion.entry import RawEntry
 from geonews.ingestion.fetcher import FetchError, Fetcher
+
+
+def _image(e, body: str) -> str | None:
+    """The picture the feed attaches to an item: media:content / media:thumbnail, an image enclosure, or the first
+    <img> of the description."""
+    base = e.get("link")
+    found = [m.get("url") for m in e.get("media_content") or []
+             if m.get("medium", "image") == "image" and str(m.get("type") or "image/").startswith("image/")]
+    found += [m.get("url") for m in e.get("media_thumbnail") or []]
+    found += [x.get("href") for x in e.get("enclosures") or [] if str(x.get("type") or "").startswith("image/")]
+    return next((u for c in found if (u := image_url(c, base))), None) or first_image(body, base)
 
 
 def _georss(e) -> tuple[float | None, float | None]:
@@ -62,7 +74,7 @@ def parse_feed(text: str, media: str = "text") -> tuple[list[RawEntry], str | No
             # membership test first: feedparser's .get("updated") falls back to "published" with a DeprecationWarning
             published=next((e[k] for k in ("published", "updated", "dc_date") if k in e and e[k]), None),
             author=e.get("author"),
-            media=media, lat=lat, lon=lon, lang=feed_lang,
+            media=media, lat=lat, lon=lon, lang=feed_lang, image=_image(e, body),
             extra={k: e.get(k) for k in ("yt_videoid", "yt_channelid") if e.get(k)},
             raw=str({k: e[k] for k in ("id", "title", "link", "published", "updated", "summary") if k in e})[:8000],
         ))

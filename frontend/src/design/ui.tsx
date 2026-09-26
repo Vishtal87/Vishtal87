@@ -1,5 +1,5 @@
 /** Small shared UI building blocks (Material 3 flavoured). */
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { Category, EventItem, Trust } from '../api/types'
 import { useI18n } from '../i18n'
 import { relTime } from '../util/format'
@@ -52,13 +52,33 @@ export function CategoryDot({ cat, categories }: { cat: string; categories: Cate
   )
 }
 
+/**
+ * A publisher's preview picture, loaded straight from the publisher: lazily, without a referrer, fading in over a
+ * placeholder. One that fails to load (or is an icon-sized pixel) is dropped instead of leaving a broken frame.
+ */
+export function Picture({ src, className }: { src: string | null | undefined; className: string }) {
+  const [loaded, setLoaded] = useState<string | null>(null)
+  const [failed, setFailed] = useState<string | null>(null)
+  if (!src || failed === src) return null
+  return (
+    <span className={`picture ${className} ${loaded === src ? 'is-loaded' : ''}`} aria-hidden>
+      <img src={src} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer"
+        onLoad={(ev) => (ev.currentTarget.naturalWidth < 80 ? setFailed(src) : setLoaded(src))}
+        onError={() => setFailed(src)} />
+    </span>
+  )
+}
+
 export function EventRow({ e, categories, onOpen, showPlace = true }: { e: EventItem; categories: Category[]
   onOpen: (id: number) => void; showPlace?: boolean }) {
   const { t, lang } = useI18n()
   return (
     <li>
       <button type="button" className="event-row" onClick={() => onOpen(e.id)}>
-        <CategoryDot cat={e.category} categories={categories} />
+        <span className="event-row__lead">
+          <Picture src={e.image} className="event-row__thumb" />
+          <CategoryDot cat={e.category} categories={categories} />
+        </span>
         <span className="event-row__body">
           <span className="event-row__title">{e.title}</span>
           <span className="event-row__meta">

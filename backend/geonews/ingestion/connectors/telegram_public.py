@@ -3,11 +3,25 @@ only channels that the owner made public with web preview enabled. Access model:
 (For large volumes use the official MTProto API with the operator's own credentials.)"""
 from __future__ import annotations
 
+import re
+
 import lxml.html
 
+from geonews.ingestion.connectors.article import image_url
 from geonews.ingestion.connectors.base import FetchResult, respects_robots
 from geonews.ingestion.entry import RawEntry
 from geonews.ingestion.fetcher import Fetcher
+
+_BG_URL = re.compile(r"background-image\s*:\s*url\(\s*['\"]?([^'\")]+)")
+_PICTURES = (".//a[contains(@class,'tgme_widget_message_photo_wrap')]/@style"
+             " | .//i[contains(@class,'tgme_widget_message_video_thumb')]/@style"
+             " | .//i[contains(@class,'link_preview')]/@style")
+
+
+def post_image(msg) -> str | None:
+    """The post's photo, video still or link preview picture (the preview page shows them as CSS backgrounds)."""
+    return next((u for style in msg.xpath(_PICTURES) if (m := _BG_URL.search(style)) and (u := image_url(m.group(1)))),
+                None)
 
 
 def channel_title(doc) -> str:
@@ -40,7 +54,7 @@ def parse_preview(html: str, channel_url: str) -> list[RawEntry]:
             external_id=post, url=link[0] if link else f"{channel_url.rstrip('/')}/{post.split('/')[-1]}",
             title=first_line[:200], body_text=body_text[len(first_line):].strip() or body_text,
             body_html=body_html, published=times[0] if times else None,
-            media="video" if has_video else "text",
+            media="video" if has_video else "text", image=post_image(msg),
             extra={"forwarded_from": fwd[0] if fwd else None, "channel_title": title},
             raw=lxml.html.tostring(msg, encoding="unicode")[:8000],
         ))

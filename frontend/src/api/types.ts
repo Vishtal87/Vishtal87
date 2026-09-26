@@ -57,6 +57,7 @@ export interface EventItem {
   synthetic: boolean
   source_types: string[]
   distance_km?: number
+  image?: string | null            // preview picture the publisher attached (a link to their server)
 }
 
 export interface PlaceFeed {
@@ -86,6 +87,7 @@ export interface SourceRef {
   forwarded_from: string | null
   version: number
   versions: { version: number; title: string; published_at: string }[]
+  image: string | null
   location: { place_id: number | null; name: string | null; precision: string | null; relation: string | null
     confidence: number | null; outlier_km: number | null }
 }

@@ -34,7 +34,7 @@ def event_detail(event_id: int, lang: str | None = None, conn: psycopg.Connectio
     if ev["status"] == "merged" and ev["merged_into"]:
         return {"redirect": ev["merged_into"]}
     arts = conn.execute(
-        """SELECT a.id, a.url, a.title, a.excerpt, a.lang, a.published_at, a.fetched_at, a.duplicate_of,
+        """SELECT a.id, a.url, a.title, a.excerpt, a.lang, a.published_at, a.fetched_at, a.duplicate_of, a.image_url,
                   a.origin_group_id, a.version, a.category, a.published_tz_assumed,
                   s.id AS source_id, s.name AS source_name, s.source_type, s.trust_tier, s.synthetic, s.access_model,
                   CASE WHEN r.payload IS NOT NULL THEN (r.payload::jsonb)->>'media' END AS media,
@@ -70,7 +70,7 @@ def event_detail(event_id: int, lang: str | None = None, conn: psycopg.Connectio
             "url": a["url"], "title": a["title"], "excerpt": a["excerpt"], "lang": a["lang"], "media": media,
             "published_at": a["published_at"], "fetched_at": a["fetched_at"], "tz_assumed": a["published_tz_assumed"],
             "copy_of": a["duplicate_of"], "forwarded_from": a["forwarded_from"], "version": a["version"],
-            "versions": a["versions"] or [],
+            "versions": a["versions"] or [], "image": a["image_url"],
             "location": {"place_id": a["loc_id"], "name": a["loc_name"], "precision": a["loc_precision"],
                          "relation": a["loc_relation"], "confidence": a["loc_confidence"],
                          "outlier_km": outliers.get(a["id"])},

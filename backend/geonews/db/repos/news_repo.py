@@ -41,7 +41,7 @@ def find_article(conn: psycopg.Connection, source_id: int, external_id: str) -> 
 
 ARTICLE_FIELDS = ("source_id", "raw_item_id", "external_id", "url", "canonical_url", "title", "text", "excerpt", "lang",
                   "lang_confidence", "published_at", "published_tz_assumed", "event_time", "is_live", "content_hash",
-                  "simhash", "sh_b0", "sh_b1", "sh_b2", "sh_b3", "category", "status")
+                  "simhash", "sh_b0", "sh_b1", "sh_b2", "sh_b3", "category", "status", "image_url")
 
 
 def insert_article(conn: psycopg.Connection, a: dict) -> int:

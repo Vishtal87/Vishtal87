@@ -1,6 +1,7 @@
 """Shared by connectors that work from web pages: fetch one article page, and pick article links from a listing."""
 from __future__ import annotations
 
+import html
 import re
 import time
 from urllib.parse import urljoin, urlsplit
@@ -18,6 +19,23 @@ _NOT_ARTICLE = re.compile(r"/(tags?|authors?|category|categories|rubric|rubrics|
                           re.IGNORECASE)
 REJECT_TTL_S = 24 * 3600
 _rejected: dict[str, float] = {}   # page URL -> time until which it is not fetched again (it gave no dated article)
+_IMG = re.compile(r"""<img\b[^>]*?\bsrc\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
+_NOT_PHOTO = re.compile(r"\.(svg|gif|ico|mp4|webm|mp3|m3u8)(\?|$)|pixel|counter|spacer|logo|favicon|1x1", re.IGNORECASE)
+
+
+def image_url(url: str | None, base: str | None = None) -> str | None:
+    """Absolute http(s) URL of a preview picture; None for logos, counters, pixels and anything that is not a photo."""
+    if not url or not url.strip():
+        return None
+    u = urljoin(base or "", html.unescape(url.strip()))
+    if urlsplit(u).scheme not in ("http", "https") or len(u) > 1000 or _NOT_PHOTO.search(u):
+        return None
+    return u
+
+
+def first_image(page_html: str | None, base: str | None = None) -> str | None:
+    """The first photo-like <img> of an HTML fragment (feeds often put the picture into the description)."""
+    return next((u for m in _IMG.finditer(page_html or "") if (u := image_url(m.group(1), base))), None)
 
 
 def same_site_links(page_html: str, base_url: str) -> list[tuple[str, str]]:
@@ -65,14 +83,16 @@ def fetch_article(fetcher: Fetcher, url: str, respect_robots: bool = True, title
         tree = lxml.html.fromstring(page.text)
         date = next((d.strip() for x in _DATE_XPATHS for d in tree.xpath(x) if d.strip()), None)
         og_title = next((t.strip() for t in tree.xpath("//meta[@property='og:title']/@content") if t.strip()), "")
+        og_image = next((u for u in tree.xpath("//meta[@property='og:image' or @name='twitter:image']/@content")
+                         if image_url(u, url)), None)
     except (ValueError, lxml.etree.ParserError):
-        date, og_title = None, ""
+        date, og_title, og_image = None, "", None
     title = title_hint or og_title or (doc.title or "").strip()
     published = published_hint or date or (doc.date if doc else None)
     if require_date and not published:
         return None
     return RawEntry(external_id=url, url=page.url or url, title=title, body_text=text, published=published,
-                    raw=page.text[:8000])
+                    image=image_url(og_image or doc.image, page.url or url), raw=page.text[:8000])
 
 
 def collect_articles(fetcher: Fetcher, urls: list[str], known: set[str], max_new: int, respect_robots: bool = True,

@@ -15,7 +15,11 @@ router = APIRouter(prefix="/api/places", tags=["places"])
 CHILD_COL = {"continent": "country_id", "country": "admin1_id", "admin1": "locality_id", "admin2": "locality_id",
              "admin3": "locality_id", "admin4": "locality_id"}
 
-EVENT_LIST_COLS = """ev.id, ev.title, ev.summary, ev.lang, ev.category, ev.event_type, ev.trust_label, ev.source_count,
+# the event's picture: the earliest one, from an outlet before a channel (channel CDN links expire sooner)
+EVENT_IMAGE = """(SELECT a.image_url FROM event_article ea JOIN article a ON a.id = ea.article_id
+      JOIN source s ON s.id = a.source_id WHERE ea.event_id = ev.id AND a.image_url IS NOT NULL
+      ORDER BY s.source_type IN ('telegram', 'blog', 'ugc'), a.published_at LIMIT 1)"""
+EVENT_LIST_COLS = f"""ev.id, ev.title, ev.summary, ev.lang, ev.category, ev.event_type, ev.trust_label, ev.source_count,
     ev.article_count, ev.independent_count, ev.first_seen_at, ev.last_article_at, ev.event_time, ev.is_live,
     ev.location_precision, ev.location_relation, ev.radius_m, ev.geo_entity_id, ev.synthetic, ev.source_types,
     ST_Y(ev.geom) AS lat, ST_X(ev.geom) AS lon, %(lang)s::text AS ui_lang,
@@ -23,6 +27,7 @@ EVENT_LIST_COLS = """ev.id, ev.title, ev.summary, ev.lang, ev.category, ev.event
       (SELECT a.title FROM event_article ea JOIN article a ON a.id = ea.article_id JOIN source s ON s.id = a.source_id
         WHERE ea.event_id = ev.id AND a.lang = %(lang)s AND a.duplicate_of IS NULL
         ORDER BY s.source_type IN ('telegram', 'blog', 'ugc'), a.published_at LIMIT 1) END AS title_local,
+    {EVENT_IMAGE} AS image,
     (SELECT coalesce(g.names->>%(lang)s, g.name) FROM geo_entity g WHERE g.id = ev.geo_entity_id) AS place_name"""
 
 
@@ -36,7 +41,7 @@ def event_item(r: dict) -> dict:
         "last_update": r["last_article_at"], "event_time": r["event_time"], "is_live": r["is_live"],
         "precision": r["location_precision"], "relation": r["location_relation"], "radius_m": r["radius_m"],
         "place_id": r["geo_entity_id"], "place_name": r["place_name"], "lat": r["lat"], "lon": r["lon"],
-        "synthetic": r["synthetic"], "source_types": r["source_types"],
+        "synthetic": r["synthetic"], "source_types": r["source_types"], "image": r["image"],
     }
 
 

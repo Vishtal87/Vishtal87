@@ -209,6 +209,20 @@
 .event-row__meta { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12.5px; color: var(--c-on-surface-variant); }
 .event-row__place { display: inline-flex; align-items: center; gap: 3px; }
 .event-row__side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+/* with a picture the category badge sits on its corner */
+.event-row__lead { position: relative; display: flex; flex: none; }
+.event-row__thumb { width: 60px; height: 60px; border-radius: 14px; }
+.event-row__lead:has(.event-row__thumb) .cat-icon { position: absolute; left: -5px; bottom: -5px; width: 24px; height: 24px;
+  min-width: 24px; border-radius: 8px; box-shadow: 0 0 0 2px var(--c-surface-container); }
+.event-row__lead:has(.event-row__thumb) .cat-icon svg { width: 13px; height: 13px; }
+.event-row:hover .event-row__lead .cat-icon { box-shadow: 0 0 0 2px var(--c-surface-container-high); }
+
+.picture { display: block; overflow: hidden; background: var(--c-surface-container-high); }
+.picture img { display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0;
+  transition: opacity var(--dur-m) var(--ease), transform var(--dur-l) var(--ease); }
+.picture.is-loaded img { opacity: 1; }
+.event-row:hover .picture.is-loaded img { transform: scale(1.04); }
+.event-card__hero { width: 100%; aspect-ratio: 16 / 9; max-height: 230px; margin-bottom: 12px; border-radius: var(--r-lg); }
 .cat-icon { display: grid; place-items: center; width: 32px; height: 32px; min-width: 32px; border-radius: 10px; color: #0b1220; }
 .cat-chip { display: inline-flex; align-items: center; gap: 8px; padding: 3px 10px 3px 3px; border-radius: var(--r-full);
   background: color-mix(in srgb, var(--chip-accent) 18%, transparent); font-size: 13px; font-weight: 600; }

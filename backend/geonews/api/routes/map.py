@@ -17,10 +17,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 from geonews.api.deps import db, ui_lang
 from geonews.api.filters import EVENT_WHERE, Filters, bbox_sql, parse_bbox, parse_filters
+from geonews.api.routes.places import EVENT_IMAGE
 from geonews.db.repos.geo_repo import display_name
 
 router = APIRouter(prefix="/api/map", tags=["map"])
 VIEWPORT_LEVELS = ("admin1", "admin2", "locality")
+LIST_IMAGES = 30             # the "latest" panel shows 25 events
 LEVEL_NUM = {"continent": 0, "country": 1, "admin1": 2, "admin2": 3, "locality": 4}
 STYPE_BIT = {"telegram": 1, "media": 2, "regional_media": 2, "local_media": 2, "tv": 2, "youtube": 4, "official": 8,
              "organization": 8, "blog": 16, "ugc": 16, "aggregator": 32}
@@ -100,14 +102,18 @@ def aggregate(level: str, bbox: str | None, lang: str | None, f: Filters, conn: 
         rows = conn.execute(
             f"""SELECT ev.id, ST_X(ev.geom) lon, ST_Y(ev.geom) lat, ev.title, ev.category, ev.trust_label,
                        ev.source_count, ev.article_count, ev.radius_m, ev.location_relation, ev.location_precision,
-                       ev.last_article_at, ev.geo_entity_id, ev.synthetic
+                       ev.last_article_at, ev.geo_entity_id, ev.synthetic,
+                       -- pictures only for the head of the list the side panel shows, not for every point on the map
+                       CASE WHEN row_number() OVER (ORDER BY ev.last_article_at DESC) <= {LIST_IMAGES}
+                            THEN {EVENT_IMAGE} END AS image
                 FROM event ev WHERE {EVENT_WHERE} AND ev.geom IS NOT NULL AND {where_bbox}
                 ORDER BY ev.last_article_at DESC LIMIT 2000""", params).fetchall()
         return _fc([_pt(r["lon"], r["lat"], {
             "kind": "event", "id": r["id"], "title": r["title"], "category": r["category"], "trust": r["trust_label"],
             "sources": r["source_count"], "articles": r["article_count"], "radius_m": r["radius_m"],
             "relation": r["location_relation"], "precision": r["location_precision"],
-            "last": r["last_article_at"].isoformat(), "synthetic": r["synthetic"], "place": r["geo_entity_id"]})
+            "last": r["last_article_at"].isoformat(), "synthetic": r["synthetic"], "place": r["geo_entity_id"],
+            **({"image": r["image"]} if r["image"] else {})})
             for r in rows])
 
     col = LEVEL_COL[level]
