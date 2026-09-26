@@ -183,7 +183,7 @@ def _score(m: Mention, source: SourceContext, ctx: dict | None) -> None:
         if c.kind in ("locality", "sublocality") and c.population < SMALL_PLACE and not cues.type_kind and not m.appos:
             in_district = bool(ctx) and c.admin2_id is not None and c.admin2_id in ctx["text_areas"]
             if (cues.person_like and not (cues.strict_locative or in_district)
-                    or cues.common_word and not in_district):
+                    or cues.common_word and not in_district or cues.org):   # «Розы Хутор» is a resort
                 s -= 6.0
         if cues.acronym and c.kind in ("locality", "sublocality"):
             s -= 6.0          # "МИД", "ЦБ", "СНГ"
@@ -196,6 +196,8 @@ def _score(m: Mention, source: SourceContext, ctx: dict | None) -> None:
             s -= 1.5
         if cues.name_like and not cues.type_kind:
             s -= 2.5
+            if cues.person_reading:
+                s -= 4.0      # "Артём Сусленков": a first name next to a surname, whatever the size of the town
         if cues.street:
             s -= 6.0
         if cues.org:

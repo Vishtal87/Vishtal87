@@ -31,6 +31,8 @@ PLACES = [
     _place(51, "locality", "Винница", 370_000, 5.6, cc="UA", country=UA),
     _place(61, "locality", "Мид", 900, 2.1, cc="US", country=None),
     _place(71, "locality", "Сочи", 443_000, 5.6, admin1=KUBAN),
+    _place(81, "locality", "Роза", 2_000, 2.5, admin1=90),
+    _place(82, "locality", "Артём", 105_000, 5.0, admin1=91),
 ]
 
 
@@ -113,3 +115,15 @@ def test_sea_and_ordinary_word_in_a_regional_story():
     primary, chosen = _where("Музеи Кубани примут участие в проекте «Территория Победы»",
                              "Музеи Краснодарского края станут участниками проекта", source=KUBAN_MEDIA)
     assert 24 not in chosen and primary == KUBAN
+
+
+def test_quoted_resort_and_first_name_are_not_places():
+    assert 81 not in _where("Инвестор «Розы Хутор» выкупил треть доли в проекте на Камчатке")[1]
+    assert 82 not in _where("Тренер Артём Сусленков оценил победу россиян на чемпионате Европы")[1]
+
+
+def test_parliament_is_not_a_town():
+    from geonews.pipeline.geoparse.mentions import extract_mentions
+
+    _, _, mentions = extract_mentions("В Раде назвали ловушкой требования ЕС", "", "ru")
+    assert "Раде" not in {m.text for m in mentions}

@@ -160,6 +160,13 @@ def word_is_common_noun(word: str, lang: str = "ru") -> bool:
     return known and geo < 0.3
 
 
+def word_can_be_person_name(word: str, lang: str = "ru") -> bool:
+    """True if one reading of the word is a first name / surname / patronymic ('Артём' is also a town)."""
+    if lang not in ("ru", "uk") or script_of(word) != "cyrl":
+        return False
+    return any({"Surn", "Name", "Patr"} & set(p.tag.grammemes) for p in _analyzer(lang).parse(word))
+
+
 def word_is_person_name(word: str, lang: str = "ru") -> bool:
     """True if the word reads as a surname / first name / patronymic and never as a place name: 'Путина',
     'Дмитриев', 'Самойлова'. Many real stanitsa names also read as surnames ('Каневская'), so this is a cue that

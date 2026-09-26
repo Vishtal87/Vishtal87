@@ -7,8 +7,8 @@ from geonews.domain.settlement_lexicon import (
     ABBREVIATIONS_NEED_DOT, DIRECTION_WORDS, DISTANCE_UNITS, NATURAL_FEATURES, NEAR_CUES, ORG_CUES, POSTPOSITIVE_OK,
     TYPE_WORDS,
 )
-from geonews.domain.text_norm import (Token, ngram_keys, script_of, token_lemmas, tokenize, word_is_common_noun,
-                                      word_is_person_name)
+from geonews.domain.text_norm import (Token, ngram_keys, script_of, token_lemmas, tokenize, word_can_be_person_name,
+                                      word_is_common_noun, word_is_person_name)
 from geonews.pipeline.geoparse.model import Cues, Mention
 
 MAX_NGRAM = 4
@@ -32,6 +32,9 @@ januar februar marz april mai juni juli august september oktober november dezemb
 montag dienstag mittwoch donnerstag freitag samstag sonntag
 police president minister government army mayor governor
 """.split())
+# institutions named like places somewhere ('в Раде' is the Ukrainian parliament, not Radom): compared by lemma
+INSTITUTIONS = set("рада дума сейм кнессет бундестаг конгресс сенат меджлис парламент rada duma knesset bundestag "
+                   "congress senate parliament".split())
 LOCATIVE_PREPS = set("в во на у под около возле близ in at near bei im am um à a au aux en em no na nel nella w we".split())
 STRICT_LOCATIVE_PREPS = {"в", "во", "под", "около", "возле", "близ"}   # "у Путина", "на Путина" are about a person
 _ACRONYM = re.compile(r"[A-ZА-ЯЁ]{2,6}[a-zа-яё]{0,2}")
@@ -110,7 +113,8 @@ def extract_mentions(title: str, body: str, lang: str | None) -> tuple[str, list
             last = toks[j]
             if last.norm in NAME_CONNECTORS:
                 continue  # a name does not end with a connector
-            if n == 1 and (len(t0.norm) < 3 or t0.norm in STOPWORDS or t0.norm in FALSE_FRIENDS):
+            if n == 1 and (len(t0.norm) < 3 or t0.norm in STOPWORDS or t0.norm in FALSE_FRIENDS
+                           or (token_lemmas(t0.norm, morph_lang)[0] if morph_lang else t0.norm) in INSTITUTIONS):
                 continue
             keys = ngram_keys(toks, i, n, morph_lang)
             m = Mention(start=t0.start, end=last.end, text=text[t0.start:last.end], keys=keys, ntokens=n,
@@ -244,6 +248,13 @@ def _cues(text: str, toks: list[Token], i: int, j: int, lang: str | None, first_
     before, after = text[max(0, t0.start - 1):t0.start], text[toks[j].end:toks[j].end + 1]
     if before in ("«", "„", "\"", "“") and after in ("»", "“", "\"", "”"):
         c.org = True
+    # ...also inside a short quoted name: «Роза Хутор», «Территория Победы» (a resort, a project); a long quote is
+    # somebody's words and may well name a place
+    opening = max(text.rfind(q, max(0, t0.start - 40), t0.start) for q in "«„")
+    if opening >= 0 and not any(q in text[opening + 1:t0.start] for q in "»“”"):
+        closing = [k for k in (text.find(q, toks[j].end, toks[j].end + 40) for q in "»“”") if k >= 0]
+        if closing and len(text[opening + 1:min(closing)].split()) <= 4:
+            c.org = True
 
     # common word check (ru/uk dictionary) for single-token spans without a type cue
     # "МИД", "ЦБ" (not "ВЗРЫВ В СОЧИ: ПОСТРАДАЛИ": in an all-caps headline every word is in capitals)
@@ -252,6 +263,7 @@ def _cues(text: str, toks: list[Token], i: int, j: int, lang: str | None, first_
     if i == j and lang and c.type_kind is None:
         c.common_word = word_is_common_noun(t0.norm, lang)
         c.person_like = word_is_person_name(t0.norm, lang)
+        c.person_reading = c.person_like or word_can_be_person_name(t0.norm, lang)
     return c
 
 
