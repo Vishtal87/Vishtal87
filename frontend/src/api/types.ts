@@ -147,3 +147,10 @@ export interface Health {
   events: { active: number; last_event_at: string | null }
   demo_mode: boolean
 }
+
+export interface Pulse {
+  last_hour: number
+  places_24h: number
+  hourly: number[]                  // new events per hour, oldest first, the current hour last
+  top: { category: string; name: string; color: string; count: number }[]
+}

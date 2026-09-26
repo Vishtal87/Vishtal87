@@ -1,8 +1,10 @@
 """Gazetteer endpoints: search, place details, reverse geocoding."""
 from __future__ import annotations
 
+import json
+
 import psycopg
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 from geonews.api.deps import db, ui_lang
 from geonews.db.repos import geo_repo
@@ -38,6 +40,23 @@ def geo_search(
 def geo_reverse(lat: float, lon: float, lang: str | None = None, conn: psycopg.Connection = Depends(db)):
     rows = geo_repo.nearest_localities(conn, lat, lon, limit=5)
     return {"results": [dict(place_dto(conn, r, ui_lang(lang)), distance_km=round(r["km"], 2)) for r in rows]}
+
+
+_lights: bytes | None = None
+
+
+@router.get("/lights")
+def city_lights(conn: psycopg.Connection = Depends(db)):
+    """Cities for the night-side lights of the globe: [lon, lat, population] of the largest places (static)."""
+    global _lights
+    if _lights is None:
+        rows = conn.execute(
+            """SELECT round(ST_X(geom)::numeric, 2) AS lon, round(ST_Y(geom)::numeric, 2) AS lat, population
+               FROM geo_entity WHERE kind = 'locality' AND population >= 30000 AND geom IS NOT NULL
+               ORDER BY population DESC LIMIT 6000""").fetchall()
+        _lights = json.dumps([[float(r["lon"]), float(r["lat"]), r["population"]] for r in rows],
+                             separators=(",", ":")).encode()
+    return Response(_lights, media_type="application/json", headers={"Cache-Control": "public, max-age=86400"})
 
 
 @router.get("/{entity_id}")

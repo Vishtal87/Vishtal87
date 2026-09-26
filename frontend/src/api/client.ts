@@ -1,5 +1,5 @@
 import type { FeatureCollection } from 'geojson'
-import type { Category, EventDetail, Filters, Health, Level, PlaceFeed, SearchResult } from './types'
+import type { Category, EventDetail, Filters, Health, Level, PlaceFeed, Pulse, SearchResult } from './types'
 
 const cache = new Map<string, { at: number; data: unknown }>()
 const TTL_MS = 20_000
@@ -47,4 +47,7 @@ export const api = {
     get<EventDetail>(`/api/events/${id}?${qs({ lang })}`, signal, false),
   categories: (lang: string) => get<Category[]>(`/api/categories?${qs({ lang })}`),
   health: () => get<Health>('/api/health', undefined, false),
+  /** [lon, lat, population] of the largest cities: the lights of the night side */
+  lights: () => get<[number, number, number][]>('/api/geo/lights'),
+  pulse: (lang: string) => get<Pulse>(`/api/stats/pulse?${qs({ lang })}`, undefined, false),
 }

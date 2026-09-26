@@ -6,11 +6,13 @@ import { IconButton } from '../design/ui'
 import { EventCard } from '../features/event/EventCard'
 import { FilterBar } from '../features/filters/FilterBar'
 import { LiveIndicator, Toasts } from '../features/live/Live'
+import { PulseCard, Ticker } from '../features/live/Pulse'
 import { LatestPanel } from '../features/place/LatestPanel'
 import { PlacePanel } from '../features/place/PlacePanel'
 import { SearchBar } from '../features/search/SearchBar'
 import { setLang, useI18n } from '../i18n'
 import { GlobeMap, levelFor, zoomFor, type CameraTarget, type MapStats } from '../map/GlobeMap'
+import { StarField } from '../map/StarField'
 import { DARK, LIGHT } from '../map/style'
 import { update, useAppState } from './state'
 import { useLive } from './useLive'
@@ -25,7 +27,7 @@ function initialTheme(): Theme {
 }
 
 const LEVEL_LABEL: Record<string, { ru: string; en: string }> = {
-  continent: { ru: 'Континенты', en: 'Continents' }, country: { ru: 'Страны', en: 'Countries' },
+  continent: { ru: 'Мир', en: 'World' }, country: { ru: 'Мир', en: 'World' },
   admin1: { ru: 'Регионы', en: 'Regions' }, admin2: { ru: 'Районы', en: 'Districts' },
   locality: { ru: 'Населённые пункты', en: 'Settlements' }, events: { ru: 'События', en: 'Events' },
 }
@@ -132,9 +134,9 @@ export function App() {
 
   return (
     <div className={`app ${panelOpen ? 'has-panel' : ''}`}>
-      <div className="space" aria-hidden />
+      <StarField />
       <GlobeMap filters={s.filters} lang={lang} palette={palette} categories={categories} selectedPlace={selected}
-        initialCamera={s.camera} flyTo={flyTo} live={live.events} refreshKey={refreshKey}
+        initialCamera={s.camera} flyTo={flyTo} live={live.events} refreshKey={refreshKey} autoRotate={!panelOpen}
         onSelectPlace={(id, kind, lat, lon) => openPlace(id, kind, lat, lon)} onSelectEvent={openEvent}
         onCamera={onCamera} onStats={setStats} />
 
@@ -170,7 +172,8 @@ export function App() {
             </div>) : null}
         </div>) : null}
 
-      <div className="map-status" aria-live="polite">
+      <div className="map-status">
+        {!panelOpen ? <PulseCard refreshKey={refreshKey} onCategory={(c) => onFilters({ cats: [c] })} /> : null}
         <nav className="crumbs crumbs--map" aria-label="breadcrumb">
           <button type="button" onClick={() => { update({ place: null, event: null }); setFlyTo({ lat: 30, lon: 30, zoom: 1.4, nonce: Date.now() }) }}>
             <Icon name="globe" size={14} /> {t.earth}
@@ -178,7 +181,8 @@ export function App() {
           {placeGeo && s.place === placeGeo.id ? [...placeGeo.breadcrumb.slice(1), { id: placeGeo.id, name: placeGeo.name, kind: placeGeo.kind }]
             .map((b) => <button key={b.id} type="button" onClick={() => openPlace(b.id)}>{b.name}</button>) : null}
         </nav>
-        <span className="map-status__level">
+        <Ticker filters={s.filters} categories={categories} refreshKey={refreshKey} onOpen={openEvent} />
+        <span className="map-status__level" aria-live="polite">
           {LEVEL_LABEL[level]?.[lang] ?? level}
           {stats && !stats.loading && !stats.error ? ` · ${t.eventsCount(stats.total)} ${t.forWindow[s.filters.window]}` : ''}
           {stats?.loading ? <span className="spinner spinner--sm" /> : null}

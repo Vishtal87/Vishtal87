@@ -4,16 +4,25 @@ import type { StyleSpecification } from 'maplibre-gl'
 export interface Palette {
   space: string; ocean: string; land: string; border: string; label: string; halo: string; dots: string
   sky: string; horizon: string
+  glow: string; glowOpacity: number        // soft light along the coasts and borders
+  night: [number, number, number]; nightAlpha: number; lights: string  // night side and city lights
 }
 
 export const DARK: Palette = {
-  space: '#03050b', ocean: '#08142a', land: '#1a2436', border: '#3a4a66', label: '#a7b3ca', halo: '#08142a',
-  dots: '#5d6d88', sky: '#0b1a33', horizon: '#3b6fb6',
+  space: '#02040a', ocean: '#061833', land: '#14233d', border: '#3a5580', label: '#b3c0d8', halo: '#061833',
+  dots: '#6a7c9c', sky: '#0b2350', horizon: '#5b9dff', glow: '#4d8ff0', glowOpacity: 0.5,
+  night: [1, 4, 14], nightAlpha: 0.62, lights: '#ffcf7a',
 }
 export const LIGHT: Palette = {
   space: '#dfe7f2', ocean: '#bcd3ee', land: '#f4f1ea', border: '#a9b3c4', label: '#3d4656', halo: '#f4f1ea',
-  dots: '#8a94a6', sky: '#9fc3f0', horizon: '#ffffff',
+  dots: '#8a94a6', sky: '#9fc3f0', horizon: '#ffffff', glow: '#7fa6d9', glowOpacity: 0.25,
+  night: [18, 34, 70], nightAlpha: 0.3, lights: '#ffb347',
 }
+
+export const skySpec = (p: Palette) => ({
+  'sky-color': p.sky, 'horizon-color': p.horizon, 'fog-color': p.ocean, 'sky-horizon-blend': 0.75,
+  'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 1, 5, 1, 7, 0],
+}) as StyleSpecification['sky']
 
 export function baseStyle(p: Palette, lang: string): StyleSpecification {
   const origin = window.location.origin
@@ -21,13 +30,7 @@ export function baseStyle(p: Palette, lang: string): StyleSpecification {
     version: 8,
     projection: { type: 'globe' },
     glyphs: `${origin}/glyphs/{fontstack}/{range}.pbf`,
-    sky: {
-      'sky-color': p.sky,
-      'horizon-color': p.horizon,
-      'fog-color': p.ocean,
-      'sky-horizon-blend': 0.6,
-      'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 1, 5, 1, 7, 0],
-    },
+    sky: skySpec(p),
     sources: {
       base: {
         type: 'vector',
@@ -39,6 +42,14 @@ export function baseStyle(p: Palette, lang: string): StyleSpecification {
     layers: [
       { id: 'ocean', type: 'background', paint: { 'background-color': p.ocean } },
       { id: 'land', type: 'fill', source: 'base', 'source-layer': 'countries', paint: { 'fill-color': p.land } },
+      {
+        id: 'coast-glow', type: 'line', source: 'base', 'source-layer': 'countries',
+        paint: {
+          'line-color': p.glow, 'line-blur': ['interpolate', ['linear'], ['zoom'], 0, 2.5, 5, 4],
+          'line-width': ['interpolate', ['linear'], ['zoom'], 0, 2.2, 4, 4.5, 7, 6],
+          'line-opacity': ['interpolate', ['linear'], ['zoom'], 0, p.glowOpacity, 5, p.glowOpacity * 0.35, 7.5, 0],
+        },
+      },
       {
         id: 'borders', type: 'line', source: 'base', 'source-layer': 'countries',
         paint: { 'line-color': p.border, 'line-width': ['interpolate', ['linear'], ['zoom'], 1, 0.4, 6, 1.1] },

@@ -1,7 +1,8 @@
 """Map layer: activity aggregated by the geographic hierarchy, or individual events when zoomed in.
 
 level=continent|country|admin1|admin2 : global aggregates (small result, cached client-side per filter set)
-level=locality                       : populated places in the viewport (+ area/region-level events there)
+level=locality                       : populated places in the viewport (+ area/region-level events there);
+                                       without bbox: every place with events worldwide (the globe's hotspots)
 level=events                         : individual events in the viewport
 """
 from __future__ import annotations
@@ -171,7 +172,7 @@ def aggregate(level: str, bbox: str | None, lang: str | None, f: Filters, conn: 
         "kind": r["kind"], "level": level, "id": r["id"], "name": display_name(r, lang), "count": int(r["n"]),
         "region_wide": int(r["region_wide"]), "top_category": r["top_category"], "last": r["last_at"].isoformat(),
         "fresh": fresh.get(r["id"], 0), "population": r["population"]}) for r in rows]
-    if level == "locality":
+    if level == "locality" and boxes:
         # events known only at area/region level inside the viewport ("в 15 км от…", "по всему району")
         p2 = f.sql_params()
         wb = bbox_sql("ev.geom", boxes, p2)
