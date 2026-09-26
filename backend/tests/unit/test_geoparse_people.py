@@ -127,3 +127,9 @@ def test_parliament_is_not_a_town():
 
     _, _, mentions = extract_mentions("В Раде назвали ловушкой требования ЕС", "", "ru")
     assert "Раде" not in {m.text for m in mentions}
+
+
+def test_person_named_elsewhere_in_the_text_is_a_person_everywhere():
+    primary, chosen = _where("Захарова жестко высказалась о Зеленском",
+                             "Официальный представитель МИД России Мария Захарова высказалась о Владимире Зеленском.")
+    assert 21 not in chosen

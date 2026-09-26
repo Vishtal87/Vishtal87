@@ -41,6 +41,7 @@ def geoparse(
         m.candidates = list(seen.values())
     mentions = _longest_matches([m for m in mentions if m.candidates])
     _link_appositions(text, mentions)
+    _one_sense_per_text(mentions)
 
     source = source or SourceContext()
     # pass 1: without inter-mention context
@@ -82,6 +83,15 @@ def geoparse(
 
 
 # ------------------------------------------------------------------------------------------------
+def _one_sense_per_text(mentions: list[Mention]) -> None:
+    """A word written next to a first name somewhere in the article ('о Владимире Зеленском') is that person in
+    every other mention too ('Зеленский заявил', 'о Зеленском' in the title)."""
+    people = {k for m in mentions if m.ntokens == 1 and m.cues.name_like and m.cues.person_reading for k in m.keys}
+    for m in mentions:
+        if m.ntokens == 1 and not m.cues.type_kind and people & set(m.keys):
+            m.cues.name_like = m.cues.person_reading = True
+
+
 def _longest_matches(mentions: list[Mention]) -> list[Mention]:
     """Drop spans covered by a longer matched span ('Новгород' inside 'Нижний Новгород')."""
     mentions.sort(key=lambda m: (-m.ntokens, m.start))
@@ -182,7 +192,7 @@ def _score(m: Mention, source: SourceContext, ctx: dict | None) -> None:
         # has a khutor 'Зеленский' and several 'Победа', and a regional story names the region anyway
         if c.kind in ("locality", "sublocality") and c.population < SMALL_PLACE and not cues.type_kind and not m.appos:
             in_district = bool(ctx) and c.admin2_id is not None and c.admin2_id in ctx["text_areas"]
-            if (cues.person_like and not (cues.strict_locative or in_district)
+            if ((cues.person_like or cues.person_reading) and not (cues.strict_locative or in_district)
                     or cues.common_word and not in_district or cues.org):   # «Розы Хутор» is a resort
                 s -= 6.0
         if cues.acronym and c.kind in ("locality", "sublocality"):
