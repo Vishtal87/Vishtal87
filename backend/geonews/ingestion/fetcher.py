@@ -90,7 +90,7 @@ class Fetcher:
                 else f"disallowed by robots.txt: {url}")
 
     def get(self, url: str, etag: str | None = None, last_modified: str | None = None,
-            respect_robots: bool = True) -> Response:
+            respect_robots: bool = True, timeout: float | None = None) -> Response:
         if respect_robots and not self.allowed(url):
             raise FetchError(self._robots_refusal(url))
         host = urlsplit(url).netloc
@@ -101,7 +101,7 @@ class Fetcher:
         if last_modified:
             headers["If-Modified-Since"] = last_modified
         try:
-            r = self.client.get(url, headers=headers)
+            r = self.client.get(url, headers=headers, **({"timeout": timeout} if timeout else {}))
         except httpx.TimeoutException as e:
             raise FetchError(f"timeout: {url}") from e
         except httpx.HTTPError as e:

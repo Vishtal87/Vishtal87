@@ -160,6 +160,31 @@ def test_check_sources_keeps_previously_verified_on_temporary_failure(tmp_path, 
     assert set(kept) == {"up", "down"} and kept["down"]["url"] == "https://b.test/rss"
 
 
+def test_previous_channel_stays_only_while_its_site_names_no_other(tmp_path, monkeypatch):
+    import yaml
+
+    from geonews import cli
+    from geonews.ingestion import verify
+    from geonews.ingestion.verify import Check
+
+    cand = tmp_path / "cand.yaml"
+    cand.write_text(yaml.safe_dump({"sources": [
+        {"slug": "down", "name": "Down", "homepage": "https://b.test/"},
+        {"slug": "regional", "name": "Regional", "homepage": "https://c.test/"},   # now links to its federal parent
+        {"slug": "tg-federal", "name": "Federal", "connector": "telegram_public", "url": "https://t.me/s/federal"}]}))
+    out = tmp_path / "out.yaml"
+    out.write_text(yaml.safe_dump({"sources": [
+        {"slug": "down-tg", "url": "https://t.me/s/down_news", "derived_from": "down"},
+        {"slug": "regional-tg", "url": "https://t.me/s/wrong_one", "derived_from": "regional"}]}))
+    monkeypatch.setattr(verify, "check_candidate", lambda spec, f: Check(
+        slug=spec["slug"], ok=spec["slug"] != "down", url=spec.get("url") or spec.get("homepage"), entries=1,
+        newest=NOW, error="HTTP 503" if spec["slug"] == "down" else None,
+        telegram=["federal"] if spec["slug"] == "regional" else []))
+    cli.main(["check-sources", str(cand), "--out", str(out), "--keep-previous"])
+    kept = {s["slug"] for s in yaml.safe_load(out.read_text())["sources"]}
+    assert kept == {"regional", "tg-federal", "down-tg"}
+
+
 def test_listing_polls_are_polite():
     links = "".join(f'<a href="/news/section-{i}">Раздел номер {i} с длинным названием для ссылки</a>' for i in range(30))
     undated = re.sub(r'<meta property="article:published_time"[^>]*>', "", _article("Раздел", NOW))

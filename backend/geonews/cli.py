@@ -21,6 +21,7 @@ def main(argv: list[str] | None = None) -> None:
     fg.add_argument("--dir", default=None, help="dump directory (default: data/geonames)")
     s = sub.add_parser("load-sources", help="load/refresh source registry from a YAML file")
     s.add_argument("file", nargs="?", default=None)
+    s.add_argument("--prune", action="store_true", help="disable sources that are no longer in the file")
     cs = sub.add_parser("check-sources", help="verify candidate sources (robots.txt, feed discovery, parse, freshness)")
     cs.add_argument("file", help="registry YAML with candidates (url or homepage per entry)")
     cs.add_argument("--out", default=None, help="write verified sources (enabled, with the working feed URL) here")
@@ -75,7 +76,7 @@ def main(argv: list[str] | None = None) -> None:
     elif args.cmd == "load-sources":
         from geonews.ingestion.registry import load_sources
 
-        print("sources:", load_sources(args.file))
+        print("sources:", load_sources(args.file, prune=args.prune))
     elif args.cmd == "check-sources":
         import yaml
 
@@ -89,11 +90,20 @@ def main(argv: list[str] | None = None) -> None:
         fetcher, ok = Fetcher(), []
         queue = read_registry(args.file)
         slugs = {s["slug"] for s in queue}
+        urls = {s["url"].lower() for s in queue if s.get("url")}
+        linked = set()              # sites whose page named a channel this time (added or already listed)
         for spec in queue:          # grows while iterating: channels found on the candidates' own sites
             chk = check_candidate(spec, fetcher)
+            if chk.telegram:
+                linked.add(spec["slug"])
             if chk.telegram and spec.get("homepage") and f"{spec['slug']}-tg" not in slugs:
-                queue.append(derived_telegram(spec, chk.telegram[0]))
-                slugs.add(queue[-1]["slug"])
+                tg = derived_telegram(spec, chk.telegram[0])
+                # a regional site linking to its federal parent's channel (РБК Краснодар -> rbc_news) must not turn
+                # that channel into a regional source: a channel already listed is not added again
+                if tg["url"].lower() not in urls:
+                    queue.append(tg)
+                    slugs.add(tg["slug"])
+                    urls.add(tg["url"].lower())
             status = "OK   " if chk.ok else ("KEEP " if spec["slug"] in previous else "FAIL ")
             detail = f"{chk.entries} items, newest {chk.age_h} h ago -> {chk.url}" if chk.url else ""
             print(f"{status}{spec['slug']:<28} {detail} {chk.error or ''}".rstrip(), flush=True)
@@ -102,8 +112,10 @@ def main(argv: list[str] | None = None) -> None:
             elif spec["slug"] in previous:
                 ok.append(previous[spec["slug"]])
         done = {s["slug"] for s in ok}
-        ok += [s for slug, s in previous.items()          # a site that was down this time: keep its channel too
-               if slug not in done and slug not in slugs and s.get("derived_from") in slugs]
+        # a site that was down this time keeps its channel; one whose page now names another (or an already listed)
+        # channel does not, so a wrong channel found earlier goes away
+        ok += [s for slug, s in previous.items()
+               if slug not in done and slug not in slugs and s.get("derived_from") in slugs - linked]
         print(f"verified {len(ok)} sources")
         if not ok:
             raise SystemExit("nothing verified, no registry written (network access? robots.txt? feed URLs?)")

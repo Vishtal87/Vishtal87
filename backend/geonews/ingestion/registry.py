@@ -50,8 +50,9 @@ def read_registry(file: str | None = None) -> list[dict]:
     return (yaml.safe_load(_expand(path.read_text())) or {}).get("sources", [])
 
 
-def load_sources(file: str | None = None) -> int:
-    n = 0
+def load_sources(file: str | None = None, prune: bool = False) -> int:
+    """Upsert the registry's sources; with `prune`, sources no longer listed are disabled (their news stays)."""
+    loaded: list[str] = []
     with connect() as conn:
         for s in read_registry(file):
             if not s.get("url"):  # a candidate with only a homepage: run `geonews check-sources` first
@@ -78,6 +79,11 @@ def load_sources(file: str | None = None) -> int:
                  "legal": s.get("legal_note"), "synthetic": bool(s.get("synthetic")), "enabled": s.get("enabled", True),
                  "poll": int(s.get("poll_interval", 300))},
             )
-            n += 1
+            loaded.append(s["slug"])
+        if prune:
+            gone = conn.execute("UPDATE source SET enabled = false WHERE enabled AND slug <> ALL(%s) RETURNING slug",
+                                (loaded,)).fetchall()
+            if gone:
+                log.info("disabled sources no longer in the registry: %s", ", ".join(r["slug"] for r in gone))
         conn.commit()
-    return n
+    return len(loaded)

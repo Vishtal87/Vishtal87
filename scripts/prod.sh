@@ -37,6 +37,8 @@ case "$cmd" in
   verify-sources)
     # runs as the invoking user so the result file in backend/config belongs to them
     # backend/config is mounted read-only into the services; the result goes through a separate writable mount
+    # build first: after `git pull` the image still holds the previous code
+    "${DC[@]}" build setup
     "${DC[@]}" run --rm --no-deps --user "$(id -u):$(id -g)" -v "$PWD/backend/config:/out" setup \
       python -m geonews.cli check-sources sources.ru.candidates.yaml --out /out/sources.ru.yaml "$@"
     echo "review backend/config/sources.ru.yaml, then: scripts/prod.sh up" ;;
@@ -81,7 +83,8 @@ case "$cmd" in
     echo "update ${old:0:7} -> ${new:0:7}"
     git merge -q --ff-only FETCH_HEAD
     # new candidates or collection code: re-check the sources, keeping the ones verified before
-    if ! git diff --quiet "$old" "$new" -- backend/config/sources.ru.candidates.yaml backend/geonews/ingestion; then
+    if ! git diff --quiet "$old" "$new" -- backend/config/sources.ru.candidates.yaml backend/geonews/ingestion \
+        backend/geonews/cli.py; then
       "$0" verify-sources --keep-previous || echo "source check failed: the current source list stays"
     fi
     if "$0" up && "$0" health 18; then

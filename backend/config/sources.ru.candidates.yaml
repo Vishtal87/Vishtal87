@@ -70,7 +70,7 @@ sources:
   - {<<: *tg, slug: tg-rbc, name: "РБК — Telegram", url: "https://t.me/s/rbc_news", config: {expect_title: "РБК", publisher: rbc}}
   - {<<: *tg, slug: tg-kommersant, name: "Коммерсантъ — Telegram", url: "https://t.me/s/kommersant",
      config: {expect_title: "Коммерсант", publisher: kommersant}}
-  - {<<: *tg, slug: tg-izvestia, name: "Известия — Telegram", url: "https://t.me/s/izvestia", config: {expect_title: "Известия"}}
+  - {<<: *tg, slug: tg-izvestia, name: "Известия — Telegram", url: "https://t.me/s/izvestia", config: {expect_title: ["Известия", "IZ.RU"]}}
   - {<<: *tg, slug: tg-interfax, name: "Интерфакс — Telegram", url: "https://t.me/s/interfaxonline",
      config: {expect_title: "Интерфакс", publisher: interfax}}
   - {<<: *tg, slug: tg-mchs, name: "МЧС России — Telegram", type: official, trust_tier: 1, url: "https://t.me/s/mchs_official",

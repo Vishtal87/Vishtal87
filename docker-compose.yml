@@ -23,7 +23,7 @@ services:
 
   setup:            # one-shot: schema, gazetteer (first run ~4 min), categories, source registry
     <<: *backend
-    command: ["sh", "-c", "python -m geonews.cli migrate && python -m geonews.cli load-categories && python -m geonews.cli import-offline --if-empty && python -m geonews.cli load-sources"]
+    command: ["sh", "-c", "python -m geonews.cli migrate && python -m geonews.cli load-categories && python -m geonews.cli import-offline --if-empty && python -m geonews.cli load-sources --prune"]
     restart: "no"
 
   api:
