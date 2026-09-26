@@ -21,7 +21,8 @@
 	import site
 }
 
-# Plain HTTP on the server's IP: a way in before DNS or the certificate are ready.
-http://{$PUBLIC_IP} {
+# Plain HTTP for every other name: the server's IP (a way in before DNS or the certificate are ready), or a
+# domain that another web server on this machine proxies here with its own HTTPS (docs/DEPLOY.md).
+http:// {
 	import site
 }
