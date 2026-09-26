@@ -7,7 +7,7 @@ import { api } from '../../api/client'
 import type { Category, Filters, Pulse } from '../../api/types'
 import { useFetch } from '../../app/useFetch'
 import { useI18n } from '../../i18n'
-import { relTime } from '../../util/format'
+import { storyTime } from '../../util/format'
 
 export function PulseCard({ refreshKey, onCategory }: { refreshKey: number; onCategory: (slug: string) => void }) {
   const { t, lang } = useI18n()
@@ -58,7 +58,7 @@ export function PulseCard({ refreshKey, onCategory }: { refreshKey: number; onCa
   )
 }
 
-interface TickerItem { id: number; title: string; category: string; last: string }
+interface TickerItem { id: number; title: string; category: string; first: string; last: string }
 
 export function Ticker({ filters, categories, refreshKey, onOpen }: {
   filters: Filters; categories: Category[]; refreshKey: number; onOpen: (id: number) => void }) {
@@ -67,7 +67,8 @@ export function Ticker({ filters, categories, refreshKey, onOpen }: {
     [JSON.stringify(filters), lang, refreshKey])
   const items: TickerItem[] = useMemo(() => (res.data?.features ?? []).slice(0, 12).map((f) => {
     const p = f.properties as Record<string, unknown>
-    return { id: Number(p.id), title: String(p.title), category: String(p.category), last: String(p.last) }
+    return { id: Number(p.id), title: String(p.title), category: String(p.category), first: String(p.first ?? p.last),
+      last: String(p.last) }
   }), [res.data])
   const [i, setI] = useState(0)
   const [paused, setPaused] = useState(false)
@@ -79,6 +80,7 @@ export function Ticker({ filters, categories, refreshKey, onOpen }: {
   if (!items.length) return null
   const it = items[i % items.length]
   const color = categories.find((c) => c.slug === it.category)?.color ?? '#9aa3b5'
+  const when = storyTime(it.first, it.last, lang)
   return (
     <button type="button" className="ticker" onClick={() => onOpen(it.id)} onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)} onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}
@@ -86,7 +88,8 @@ export function Ticker({ filters, categories, refreshKey, onOpen }: {
       <span className="ticker__label">{t.tickerNow}</span>
       <span className="ticker__dot" style={{ background: color }} />
       <span key={it.id} className="ticker__text">{it.title}</span>
-      <span className="ticker__time">{relTime(it.last, lang)}</span>
+      <span className="ticker__time" title={when.updated ? t.updatedAgo(when.updated) : undefined}>
+        {when.started}{when.updated ? ' · ↻' : ''}</span>
     </button>
   )
 }

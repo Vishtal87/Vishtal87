@@ -17,7 +17,7 @@ export function LatestPanel({ bbox, filters, categories, refreshKey, onOpenEvent
     return {
       id: Number(p.id), title: String(p.title), original_title: String(p.title), title_lang: null, summary: '',
       category: String(p.category), event_type: null, trust: p.trust as EventItem['trust'], sources: Number(p.sources),
-      articles: Number(p.articles), independent: 0, first_seen: String(p.last), last_update: String(p.last),
+      articles: Number(p.articles), independent: 0, first_seen: String(p.first ?? p.last), last_update: String(p.last),
       event_time: null, is_live: true, precision: String(p.precision), relation: String(p.relation),
       radius_m: (p.radius_m as number) ?? null, place_id: Number(p.place) || null, place_name: null, lat: null, lon: null,
       synthetic: Boolean(p.synthetic), source_types: [], image: (p.image as string | undefined) ?? null,

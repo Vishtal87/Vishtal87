@@ -2,7 +2,7 @@
 import { useState, type ReactNode } from 'react'
 import type { Category, EventItem, Trust } from '../api/types'
 import { useI18n } from '../i18n'
-import { relTime } from '../util/format'
+import { storyTime } from '../util/format'
 import { Icon } from './icons'
 
 export function Chip(props: { selected?: boolean; onClick?: () => void; children: ReactNode; icon?: string
@@ -72,6 +72,7 @@ export function Picture({ src, className }: { src: string | null | undefined; cl
 export function EventRow({ e, categories, onOpen, showPlace = true }: { e: EventItem; categories: Category[]
   onOpen: (id: number) => void; showPlace?: boolean }) {
   const { t, lang } = useI18n()
+  const when = storyTime(e.first_seen, e.last_update, lang)
   return (
     <li>
       <button type="button" className="event-row" onClick={() => onOpen(e.id)}>
@@ -84,7 +85,8 @@ export function EventRow({ e, categories, onOpen, showPlace = true }: { e: Event
           <span className="event-row__meta">
             {showPlace && e.place_name ? <span className="event-row__place"><Icon name="pin" size={13} />{e.place_name}
               {e.relation === 'near' ? ` · ${t.relation.near.toLowerCase()}` : ''}</span> : null}
-            <span>{relTime(e.last_update, lang)}</span>
+            <span>{when.started}</span>
+            {when.updated ? <span className="event-row__updated">↻ {t.updatedAgo(when.updated)}</span> : null}
             <span>{t.sourcesN(e.sources)}</span>
             {e.distance_km != null ? <span>{e.distance_km} км</span> : null}
           </span>

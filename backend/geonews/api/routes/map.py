@@ -102,7 +102,7 @@ def aggregate(level: str, bbox: str | None, lang: str | None, f: Filters, conn: 
         rows = conn.execute(
             f"""SELECT ev.id, ST_X(ev.geom) lon, ST_Y(ev.geom) lat, ev.title, ev.category, ev.trust_label,
                        ev.source_count, ev.article_count, ev.radius_m, ev.location_relation, ev.location_precision,
-                       ev.last_article_at, ev.geo_entity_id, ev.synthetic,
+                       ev.first_seen_at, ev.last_article_at, ev.geo_entity_id, ev.synthetic,
                        -- pictures only for the head of the list the side panel shows, not for every point on the map
                        CASE WHEN row_number() OVER (ORDER BY ev.last_article_at DESC) <= {LIST_IMAGES}
                             THEN {EVENT_IMAGE} END AS image
@@ -112,7 +112,8 @@ def aggregate(level: str, bbox: str | None, lang: str | None, f: Filters, conn: 
             "kind": "event", "id": r["id"], "title": r["title"], "category": r["category"], "trust": r["trust_label"],
             "sources": r["source_count"], "articles": r["article_count"], "radius_m": r["radius_m"],
             "relation": r["location_relation"], "precision": r["location_precision"],
-            "last": r["last_article_at"].isoformat(), "synthetic": r["synthetic"], "place": r["geo_entity_id"],
+            "first": r["first_seen_at"].isoformat(), "last": r["last_article_at"].isoformat(),
+            "synthetic": r["synthetic"], "place": r["geo_entity_id"],
             **({"image": r["image"]} if r["image"] else {})})
             for r in rows])
 
