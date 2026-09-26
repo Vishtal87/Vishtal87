@@ -34,6 +34,7 @@ police president minister government army mayor governor
 """.split())
 LOCATIVE_PREPS = set("в во на у под около возле близ in at near bei im am um à a au aux en em no na nel nella w we".split())
 STRICT_LOCATIVE_PREPS = {"в", "во", "под", "около", "возле", "близ"}   # "у Путина", "на Путина" are about a person
+_ACRONYM = re.compile(r"[A-ZА-ЯЁ]{2,6}[a-zа-яё]{0,2}")
 NAME_CONNECTORS = {"на", "де", "ла", "ле", "de", "la", "le", "du", "des", "am", "an", "im", "upon", "on", "del", "di",
                    "sur", "en", "-"}
 
@@ -247,7 +248,7 @@ def _cues(text: str, toks: list[Token], i: int, j: int, lang: str | None, first_
     # common word check (ru/uk dictionary) for single-token spans without a type cue
     # "МИД", "ЦБ" (not "ВЗРЫВ В СОЧИ: ПОСТРАДАЛИ": in an all-caps headline every word is in capitals)
     caps_around = sum(1 for t in toks[max(0, i - 3):i] + toks[j + 1:j + 4] if len(t.text) >= 4 and t.text.isupper())
-    c.acronym = i == j and len(t0.text) <= 6 and t0.text.isupper() and t0.text.isalpha() and not caps_around
+    c.acronym = i == j and bool(_ACRONYM.fullmatch(t0.text)) and not caps_around     # also inflected: "МИДа", "ЦБе"
     if i == j and lang and c.type_kind is None:
         c.common_word = word_is_common_noun(t0.norm, lang)
         c.person_like = word_is_person_name(t0.norm, lang)

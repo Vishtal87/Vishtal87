@@ -103,6 +103,7 @@ def test_national_outlet_prefers_the_foreign_city_over_a_home_country_hamlet():
 def test_acronym_is_not_a_town():
     assert 61 not in _where("Лавров обсудил с главой МИД Индии конфликты")[1]
     assert 61 not in _where("Заявление МИД США о переговорах")[1]
+    assert 61 not in _where("Лавров обсудил с главой МИДа Индии конфликты")[1]
     assert _where("⚡️ВЗРЫВ В СОЧИ: ПОСТРАДАЛИ ДВА ЧЕЛОВЕКА", source=KUBAN_MEDIA)[0] == 71
 
 
