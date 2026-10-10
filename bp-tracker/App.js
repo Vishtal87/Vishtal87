@@ -147,10 +147,13 @@ export default function App() {
   // Функция доступна с Pro. Без Pro показываем заглушку и кнопку теста.
   function gated(feature, action) {
     if (isUnlocked(feature, isPro)) return action();
-    Alert.alert('Pro', tr('proSoon'), [
+    // Без подписки — экран с условиями. В релизной сборке тестового входа нет.
+    const buttons = [
       { text: tr('cancel'), style: 'cancel' },
-      { text: tr('proTestUnlock'), onPress: () => { toggleTestPro(); } },
-    ]);
+      { text: tr('subscribeButton'), onPress: () => Alert.alert(tr('subscribeTitle'), tr('subscribeNotReady')) },
+    ];
+    if (__DEV__) buttons.push({ text: tr('proTestUnlock'), onPress: () => toggleTestPro() });
+    Alert.alert(tr('subscribeTitle'), `${tr('subscribeIncludes')}\n\n${tr('subscribePrice')}\n\n${tr('subscribeTerms')}`, buttons);
   }
 
   function markIntake(medId, time, status) {
@@ -414,10 +417,20 @@ export default function App() {
               </TouchableOpacity>
             </Card>
             <Card t={t}>
-              <Text style={[styles.muted, { color: t.muted }]}>Pro: {isPro ? 'включено (тест)' : 'выключено'}</Text>
-              <TouchableOpacity style={[styles.button, { backgroundColor: t.muted }]} onPress={toggleTestPro}>
-                <Text style={styles.buttonText}>{isPro ? tr('proTestLock') : tr('proTestUnlock')}</Text>
+              <Text style={[styles.h2, { color: t.text }]}>{tr('subscribeTitle')}</Text>
+              <Text style={[styles.muted, { color: t.muted }]}>{tr('subscribeIncludes')}</Text>
+              <Text style={[styles.muted, { color: t.muted, fontSize: 12 }]}>{tr('subscribeTerms')}</Text>
+              <TouchableOpacity style={[styles.button, { backgroundColor: t.accent }]} onPress={() => Alert.alert(tr('subscribeTitle'), tr('subscribeNotReady'))}>
+                <Text style={styles.buttonText}>{tr('subscribeButton')}</Text>
               </TouchableOpacity>
+              <TouchableOpacity style={[styles.button, { backgroundColor: t.muted }]} onPress={() => Alert.alert(tr('restorePurchases'), tr('subscribeNotReady'))}>
+                <Text style={styles.buttonText}>{tr('restorePurchases')}</Text>
+              </TouchableOpacity>
+              {__DEV__ ? (
+                <TouchableOpacity style={[styles.button, { backgroundColor: '#78716c' }]} onPress={toggleTestPro}>
+                  <Text style={styles.buttonText}>{`${isPro ? tr('proTestLock') : tr('proTestUnlock')} (${tr('proDevOnly')})`}</Text>
+                </TouchableOpacity>
+              ) : null}
             </Card>
           </>
         )}
