@@ -1,0 +1,18 @@
+{
+  "cli": { "version": ">= 16.0.0" },
+  "build": {
+    "preview-test": {
+      "distribution": "internal",
+      "env": { "EXPO_PUBLIC_TEST_PRO": "1" },
+      "android": { "buildType": "apk" },
+      "ios": { "simulator": false }
+    },
+    "production": {
+      "autoIncrement": true,
+      "android": { "buildType": "app-bundle" }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
