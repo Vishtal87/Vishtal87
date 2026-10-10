@@ -516,13 +516,22 @@ export default function App() {
     }
   }
 
-  async function exportBackup() {
-    try {
-      const text = buildBackup({ records, meds, intake, units });
-      await shareFile(`health-diary-backup-${dateKey(Date.now())}.json`, text, 'application/json', 'public.json', tr('backupTitle'));
-    } catch (e) {
-      Alert.alert(tr('backupTitle'), String(e.message ?? e));
-    }
+  // Копия — открытый файл с данными о здоровье. Перед отправкой предупреждаем, куда он может попасть.
+  function exportBackup() {
+    Alert.alert(tr('backupTitle'), tr('backupExportWarn'), [
+      { text: tr('cancel'), style: 'cancel' },
+      {
+        text: tr('backupExportContinue'),
+        onPress: async () => {
+          try {
+            const text = buildBackup({ records, meds, intake, units });
+            await shareFile(`health-diary-backup-${dateKey(Date.now())}.json`, text, 'application/json', 'public.json', tr('backupTitle'));
+          } catch (e) {
+            Alert.alert(tr('backupTitle'), String(e.message ?? e));
+          }
+        },
+      },
+    ]);
   }
 
   // Сначала проверяем файл и показываем, сколько записей в нём. Данные меняются только после подтверждения.
@@ -534,7 +543,12 @@ export default function App() {
         copyToCacheDirectory: true,
       });
       if (res.canceled) return;
-      text = await new File(res.assets[0].uri).text();
+      const picked = new File(res.assets[0].uri);
+      try {
+        text = await picked.text();
+      } finally {
+        if (picked.exists) picked.delete();
+      }
     } catch (e) {
       return Alert.alert(tr('backupTitle'), tr('backupBadFile'));
     }
@@ -1090,12 +1104,17 @@ export default function App() {
 }
 
 // Файл во временной папке и системное окно «Поделиться». Старый файл с тем же именем заменяется.
+// Файл во временной папке удаляем сразу после отправки: копия с данными о здоровье не должна лежать на телефоне.
 async function shareFile(name, text, mimeType, uti, dialogTitle) {
   const file = new File(Paths.cache, name);
   if (file.exists) file.delete();
   file.create();
   file.write(text);
-  await Sharing.shareAsync(file.uri, { mimeType, UTI: uti, dialogTitle });
+  try {
+    await Sharing.shareAsync(file.uri, { mimeType, UTI: uti, dialogTitle });
+  } finally {
+    if (file.exists) file.delete();
+  }
 }
 
 async function ensureNotifications() {
