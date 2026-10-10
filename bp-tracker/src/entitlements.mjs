@@ -6,6 +6,7 @@ export const PRO_FEATURES = Object.freeze({
   backup: 'backup',
   intakeLog: 'intakeLog',
   healthSync: 'healthSync',
+  devices: 'devices',
 });
 
 // Бесплатно можно одно лекарство с напоминанием.

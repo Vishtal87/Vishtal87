@@ -37,6 +37,7 @@
 - **Health Connect** (Android, по желанию): чтение и запись измерений давления, глюкозы и веса. Включается только при подключении в приложении и отключается в настройках Health Connect.
 - **Общий доступ к файлам**: нужен только для отправки экспортированного файла через системное окно.
 - **Уведомления**: напоминания о приёме лекарств. Они создаются на телефоне по расписанию, который задали вы. На сервер ничего не отправляется.
+- **Bluetooth** (по желанию): поиск и подключение тонометра, глюкометра и весов со стандартным Bluetooth-профилем. Измерения читаются с прибора и записываются в дневник на телефоне. Геолокация не используется.
 - **Выбор файла**: для восстановления резервной копии приложение открывает системный выбор файла. Читается только выбранный вами файл.
 
 Приложение не запрашивает доступ к контактам, камере, геолокации и микрофону.
@@ -73,7 +74,7 @@ The app has no ads, no analytics, no tracking SDKs and does not share data with 
 
 **Purchases.** Pro subscriptions are processed by the App Store or RuStore. The developer does not receive payment details.
 
-**Permissions.** Health Connect (optional; read and write of blood pressure, glucose and weight), notifications (local medicine reminders, scheduled on the device only) and the system share and file picker. The app does not request contacts, camera, location or microphone access.
+**Permissions.** Health Connect (optional; read and write of blood pressure, glucose and weight), Bluetooth (optional; connecting blood pressure monitors, glucose meters and scales; location is not used), notifications (local medicine reminders, scheduled on the device only) and the system share and file picker. The app does not request contacts, camera, location or microphone access.
 
 **Retention and deletion.** Data stays on the device until you delete it in the app or uninstall the app. Records written to Health Connect are managed in Health Connect.
 

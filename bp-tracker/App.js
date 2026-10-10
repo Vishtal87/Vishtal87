@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Linking,
@@ -43,6 +43,8 @@ import { buildBackup, parseBackup } from './src/backup.mjs';
 import { buildReportHtml } from './src/report.mjs';
 import { toHealthRecord, pendingRecords, healthTypeFor, fromHealthRecord, ALL_PERMISSIONS, READ_PERMISSIONS } from './src/healthSync.mjs';
 import { canAddReminder, reminderSlots } from './src/reminders.mjs';
+import { DEVICE_KINDS } from './src/ble.mjs';
+import { requestBlePermissions, bluetoothPowered, scanDevices, kindOf, listenMeasurements } from './src/devices.js';
 import { chartPoints, scaleRange } from './src/chart.mjs';
 import { PRIVACY_URL, TERMS_URL } from './src/links.mjs';
 import { PRO_PLANS, PRO_SKUS, sortPlans, buildSubscriptionRequest, hasProPurchase } from './src/purchases.mjs';
@@ -143,6 +145,14 @@ export default function App() {
   const [reportDays, setReportDays] = useState(30);
   const [hcSynced, setHcSynced] = useState([]);
   const [hcReady, setHcReady] = useState(false);
+  const [devices, setDevices] = useState([]);
+  const [deviceStatus, setDeviceStatus] = useState(null);
+  const stopListeningRef = useRef(null);
+
+  // При уходе с экрана отключаем прибор, если к нему подключены.
+  useEffect(() => () => {
+    if (stopListeningRef.current) stopListeningRef.current();
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -220,6 +230,54 @@ export default function App() {
     if (!loaded) return;
     scheduleReminders(meds, (key, vars) => translate(lang, key, vars)).catch(() => {});
   }, [meds, loaded, lang]);
+
+  // Поиск приборов по Bluetooth: тонометр, глюкометр, весы со стандартными профилями.
+  async function searchDevices() {
+    setDevices([]);
+    setDeviceStatus(tr('devicesSearching'));
+    try {
+      if (!(await requestBlePermissions())) return setDeviceStatus(tr('blePermission'));
+      if (!(await bluetoothPowered())) return setDeviceStatus(tr('bleOff'));
+      const found = await scanDevices(12000);
+      setDevices(found.map((d) => ({ id: d.id, name: d.localName || d.name || d.id, kind: kindOf(d) })).filter((d) => d.kind));
+      setDeviceStatus(found.length ? tr('devicesFound', { n: found.length }) : tr('devicesNone'));
+    } catch (e) {
+      setDeviceStatus(tr('devFailed'));
+    }
+  }
+
+  // Подключаемся к прибору и записываем каждое измерение. Слушаем минуту, потом отключаемся.
+  async function listenTo(device) {
+    if (stopListeningRef.current) {
+      await stopListeningRef.current();
+      stopListeningRef.current = null;
+    }
+    setDeviceStatus(tr('devWaiting'));
+    try {
+      const stop = await listenMeasurements(device.id, device.kind, (parsed) => {
+        const kind = DEVICE_KINDS[device.kind];
+        const input = device.kind === 'bp'
+          ? { systolic: parsed.systolic, diastolic: parsed.diastolic, pulse: parsed.pulse ?? '' }
+          : device.kind === 'glucose'
+            ? { value: parsed.value, context: parsed.context }
+            : { value: parsed.value };
+        const check = validateMeasurement(kind.type, input, { glucose: 'mmol', weight: 'kg' });
+        if (check.error) return;
+        const rec = { ...makeRecord(kind.type, check.values, Date.now()), source: 'device' };
+        setRecords((prev) => [rec, ...prev]);
+        setDeviceStatus(tr('devGot', { value: formatValue(rec, units) }));
+      });
+      stopListeningRef.current = stop;
+      setTimeout(async () => {
+        if (stopListeningRef.current !== stop) return;
+        await stop();
+        stopListeningRef.current = null;
+        setDeviceStatus(tr('devTimeout'));
+      }, 60000);
+    } catch (e) {
+      setDeviceStatus(tr('devFailed'));
+    }
+  }
 
   async function hcConnect() {
     if (Platform.OS !== 'android') return;
@@ -708,7 +766,7 @@ export default function App() {
                           {r.type === TYPES.bp && r.values.pulse ? <Text style={[styles.muted, { color: t.muted }]}>  · {tr('pulseShort', { v: r.values.pulse })}</Text> : null}
                         </Text>
                         <Text style={[styles.itemDate, { color: t.muted }]}>
-                          {typeLabel(r.type)} · {formatDate(r.takenAt)}{r.source === 'health' ? ` · ${tr('fromHealth')}` : ''}
+                          {typeLabel(r.type)} · {formatDate(r.takenAt)}{r.source === 'health' ? ` · ${tr('fromHealth')}` : r.source === 'device' ? ` · ${tr('fromDevice')}` : ''}
                         </Text>
                         {cat ? <Text style={[styles.badge, { color }]}>{catLabel(cat)}</Text> : null}
                         {r.type === TYPES.glucose ? <Text style={[styles.muted, { color: t.muted, fontSize: 12 }]}>{tr(`ctx_${r.values.context}`)}</Text> : null}
@@ -761,6 +819,32 @@ export default function App() {
                 </TouchableOpacity>
               </Card>
             ) : null}
+            <Card t={t}>
+              <View style={styles.titleRow}>
+                <Text style={[styles.h2, { color: t.text }]}>{tr('devicesTitle')}</Text>
+                <ProBadge tr={tr} />
+              </View>
+              <Text style={[styles.muted, { color: t.muted }]}>{tr('devicesHint')}</Text>
+              <TouchableOpacity style={[styles.button, { backgroundColor: t.accent }]} onPress={() => gated(PRO_FEATURES.devices, searchDevices)} accessibilityRole="button">
+                <Ionicons name="bluetooth-outline" size={20} color="#fff" />
+                <Text style={styles.buttonText}>{tr('devicesButton')}</Text>
+              </TouchableOpacity>
+              {deviceStatus ? <Text style={[styles.muted, { color: t.muted }]} accessibilityLiveRegion="polite">{deviceStatus}</Text> : null}
+              {devices.map((d) => (
+                <TouchableOpacity
+                  key={d.id}
+                  style={[styles.item, { borderTopColor: t.border }]}
+                  onPress={() => gated(PRO_FEATURES.devices, () => listenTo(d))}
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="bluetooth-outline" size={22} color={t.accent} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.itemMain, { color: t.text }]}>{d.name}</Text>
+                    <Text style={[styles.muted, { color: t.muted }]}>{tr(`devKind_${d.kind}`)}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </Card>
             <Card t={t}>
               <Text style={[styles.h2, { color: t.text }]}>{tr('subscribeTitle')}</Text>
               <Text style={[styles.muted, { color: t.muted }]}>{tr('subscribeIncludes')}</Text>
