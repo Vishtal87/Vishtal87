@@ -65,6 +65,10 @@ const CATEGORY_COLORS = {
 const LIGHT = { bg: '#FFF6D6', card: '#FFFFFF', text: '#000000', muted: '#3f3f46', border: '#000000', shadow: '#000000', accent: '#FF3D8B', inputBg: '#FFFFFF', tabBar: '#FFFFFF' };
 const DARK = { bg: '#121212', card: '#1E1E1E', text: '#FFFFFF', muted: '#D4D4D8', border: '#FFFFFF', shadow: '#FFFFFF', accent: '#FFE600', inputBg: '#262626', tabBar: '#1E1E1E' };
 const LINE = 3;
+// Тестовый переключатель Pro есть только в разработке и в сборке с флагом EXPO_PUBLIC_TEST_PRO=1.
+// Магазинные сборки этот флаг не получают.
+const TEST_PRO_BUILD = process.env.EXPO_PUBLIC_TEST_PRO === '1';
+const SHOW_TEST_PRO = __DEV__ || TEST_PRO_BUILD;
 const SHADOW = 6;
 
 const TABS = [
@@ -139,6 +143,7 @@ export default function App() {
     AsyncStorage.multiGet([PRO_KEY, INTAKE_KEY]).then((pairs) => {
       const [pro, intakeRaw] = pairs.map((p) => p[1]);
       if (pro) setIsPro(pro === 'true');
+      else if (TEST_PRO_BUILD) setIsPro(true);
       if (intakeRaw) setIntakeList(JSON.parse(intakeRaw));
     }).catch(() => {});
   }, []);
@@ -201,7 +206,7 @@ export default function App() {
       { text: tr('cancel'), style: 'cancel' },
       { text: tr('subscribeButton'), onPress: () => Alert.alert(tr('subscribeTitle'), tr('subscribeNotReady')) },
     ];
-    if (__DEV__) buttons.push({ text: tr('proTestUnlock'), onPress: () => toggleTestPro() });
+    if (SHOW_TEST_PRO) buttons.push({ text: tr('proTestUnlock'), onPress: () => toggleTestPro() });
     Alert.alert(tr('subscribeTitle'), `${tr('subscribeIncludes')}\n\n${tr('subscribePrice')}\n\n${tr('subscribeTerms')}`, buttons);
   }
 
@@ -487,7 +492,7 @@ export default function App() {
               <TouchableOpacity style={[styles.button, { backgroundColor: t.muted }]} onPress={() => Alert.alert(tr('restorePurchases'), tr('subscribeNotReady'))}>
                 <Text style={styles.buttonText}>{tr('restorePurchases')}</Text>
               </TouchableOpacity>
-              {__DEV__ ? (
+              {SHOW_TEST_PRO ? (
                 <TouchableOpacity style={[styles.button, { backgroundColor: '#78716c' }]} onPress={toggleTestPro}>
                   <Text style={styles.buttonText}>{`${isPro ? tr('proTestLock') : tr('proTestUnlock')} (${tr('proDevOnly')})`}</Text>
                 </TouchableOpacity>
