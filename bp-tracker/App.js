@@ -8,12 +8,14 @@ import {
   TextInput,
   TouchableOpacity,
   useColorScheme,
+  Platform,
   Vibration,
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
+import * as HealthConnect from 'react-native-health-connect';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { classify, parseTakenAt } from './src/bp.mjs';
@@ -34,6 +36,7 @@ import { PRO_FEATURES, isUnlocked } from './src/entitlements.mjs';
 import { INTAKE_STATUS, setIntake, statusFor, dateKey } from './src/intake.mjs';
 import { buildBackup, parseBackup } from './src/backup.mjs';
 import { buildReportHtml } from './src/report.mjs';
+import { toHealthRecord, pendingRecords, WRITE_PERMISSIONS } from './src/healthSync.mjs';
 import { translate, localeTag, detectLanguage, LANGUAGES } from './src/i18n.mjs';
 
 const RECORDS_KEY = 'health-records-v2';
@@ -43,6 +46,7 @@ const UNITS_KEY = 'health-units-v1';
 const MEDS_KEY = 'meds-v1';
 const PRO_KEY = 'pro-v1';
 const INTAKE_KEY = 'intake-v1';
+const HC_SYNCED_KEY = 'hc-synced-v1';
 const DAY = 24 * 60 * 60 * 1000;
 const CHART_POINTS = 30;
 const CHART_MIN = 40;
@@ -97,6 +101,8 @@ export default function App() {
   const [intake, setIntakeList] = useState([]);
   const [reportDays, setReportDays] = useState(30);
   const [restoreText, setRestoreText] = useState('');
+  const [hcSynced, setHcSynced] = useState([]);
+  const [hcReady, setHcReady] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -137,6 +143,46 @@ export default function App() {
   useEffect(() => {
     AsyncStorage.setItem(INTAKE_KEY, JSON.stringify(intake)).catch(() => {});
   }, [intake]);
+
+  useEffect(() => {
+    AsyncStorage.getItem(HC_SYNCED_KEY).then((raw) => {
+      if (raw) setHcSynced(JSON.parse(raw));
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    AsyncStorage.setItem(HC_SYNCED_KEY, JSON.stringify(hcSynced)).catch(() => {});
+  }, [hcSynced]);
+
+  async function hcConnect() {
+    if (Platform.OS !== 'android') return Alert.alert(tr('hcTitle'), tr('hcIosLater'));
+    try {
+      const ok = await HealthConnect.initialize();
+      if (!ok) return Alert.alert(tr('hcTitle'), tr('hcUnavailable'));
+      const granted = await HealthConnect.requestPermission(WRITE_PERMISSIONS);
+      if (!granted || granted.length === 0) return Alert.alert(tr('hcTitle'), tr('hcDenied'));
+      setHcReady(true);
+      await hcSync();
+    } catch (e) {
+      Alert.alert(tr('hcTitle'), String(e.message ?? e));
+    }
+  }
+
+  async function hcSync() {
+    const todo = pendingRecords(records, hcSynced);
+    if (todo.length === 0) return Alert.alert(tr('hcTitle'), tr('hcDone', { n: 0 }));
+    const sent = [];
+    try {
+      for (let i = 0; i < todo.length; i += 100) {
+        const batch = todo.slice(i, i + 100);
+        await HealthConnect.insertRecords(batch.map(toHealthRecord));
+        sent.push(...batch.map((r) => r.id));
+      }
+    } finally {
+      if (sent.length) setHcSynced((prev) => [...prev, ...sent]);
+    }
+    Alert.alert(tr('hcTitle'), tr('hcDone', { n: sent.length }));
+  }
 
   function toggleTestPro() {
     const next = !isPro;
@@ -414,6 +460,18 @@ export default function App() {
               <TouchableOpacity style={[styles.button, { backgroundColor: restoreText ? t.accent : t.muted }]} disabled={!restoreText} onPress={() => gated(PRO_FEATURES.backup, restoreBackup)}>
                 <Ionicons name="cloud-upload-outline" size={20} color="#fff" />
                 <Text style={styles.buttonText}>{tr('backupRestore')}</Text>
+              </TouchableOpacity>
+            </Card>
+            <Card t={t}>
+              <View style={styles.titleRow}>
+                <Text style={[styles.h2, { color: t.text }]}>{tr('hcTitle')}</Text>
+                <ProBadge tr={tr} />
+              </View>
+              <Text style={[styles.muted, { color: t.muted }]}>{tr('hcHint')}</Text>
+              <Text style={[styles.muted, { color: t.muted, fontSize: 12 }]}>{tr('hcCount', { n: hcSynced.length })}</Text>
+              <TouchableOpacity style={[styles.button, { backgroundColor: t.accent }]} onPress={() => gated(PRO_FEATURES.healthSync, hcReady ? hcSync : hcConnect)}>
+                <Ionicons name="heart-circle-outline" size={20} color="#fff" />
+                <Text style={styles.buttonText}>{hcReady ? tr('hcSync') : tr('hcConnect')}</Text>
               </TouchableOpacity>
             </Card>
             <Card t={t}>
