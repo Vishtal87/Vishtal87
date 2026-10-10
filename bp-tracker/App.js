@@ -14,18 +14,27 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
+import { classify, parseTakenAt } from './src/bp.mjs';
 import {
-  classify,
-  makeReading,
-  parseTakenAt,
+  TYPES,
+  GLUCOSE_CONTEXTS,
+  validateMeasurement,
+  makeRecord,
+  migrateRecords,
+  formatValue,
+  unitLabel,
+  ofType,
   sortNewestFirst,
-  toCsv,
-  validate,
-} from './src/bp.mjs';
+  toCsvRecords,
+} from './src/measurements.mjs';
+import { validateMed, makeMed } from './src/meds.mjs';
 import { translate, localeTag, detectLanguage, LANGUAGES } from './src/i18n.mjs';
 
-const STORAGE_KEY = 'bp-readings-v1';
+const RECORDS_KEY = 'health-records-v2';
+const OLD_BP_KEY = 'bp-readings-v1';
 const LANG_KEY = 'bp-lang-v1';
+const UNITS_KEY = 'health-units-v1';
+const MEDS_KEY = 'meds-v1';
 const CHART_POINTS = 30;
 const CHART_MIN = 40;
 const CHART_MAX = 200;
@@ -39,33 +48,17 @@ const CATEGORY_COLORS = {
   crisis: '#991b1b',
 };
 
-const LIGHT = {
-  bg: '#f5f5f4',
-  card: '#ffffff',
-  text: '#1c1917',
-  muted: '#78716c',
-  border: '#e7e5e4',
-  accent: '#2563eb',
-  inputBg: '#ffffff',
-  tabBar: '#ffffff',
-};
-
-const DARK = {
-  bg: '#0c0a09',
-  card: '#1c1917',
-  text: '#fafaf9',
-  muted: '#a8a29e',
-  border: '#292524',
-  accent: '#60a5fa',
-  inputBg: '#292524',
-  tabBar: '#1c1917',
-};
+const LIGHT = { bg: '#f5f5f4', card: '#ffffff', text: '#1c1917', muted: '#78716c', border: '#e7e5e4', accent: '#2563eb', inputBg: '#ffffff', tabBar: '#ffffff' };
+const DARK = { bg: '#0c0a09', card: '#1c1917', text: '#fafaf9', muted: '#a8a29e', border: '#292524', accent: '#60a5fa', inputBg: '#292524', tabBar: '#1c1917' };
 
 const TABS = [
   { key: 'input', label: 'tabInput', icon: 'add-circle-outline' },
   { key: 'history', label: 'tabHistory', icon: 'list-outline' },
   { key: 'charts', label: 'tabCharts', icon: 'bar-chart-outline' },
+  { key: 'meds', label: 'tabMeds', icon: 'medkit-outline' },
 ];
+
+const TYPE_ICONS = { bp: 'heart-outline', glucose: 'water-outline', weight: 'scale-outline' };
 
 export default function App() {
   const scheme = useColorScheme();
@@ -73,58 +66,79 @@ export default function App() {
   const [lang, setLang] = useState(detectLanguage(Intl.DateTimeFormat().resolvedOptions().locale));
   const tr = (key, vars) => translate(lang, key, vars);
   const [tab, setTab] = useState('input');
-  const [readings, setReadings] = useState([]);
+  const [type, setType] = useState(TYPES.bp);
+  const [historyFilter, setHistoryFilter] = useState('all');
+  const [records, setRecords] = useState([]);
+  const [meds, setMeds] = useState([]);
+  const [units, setUnits] = useState({ glucose: 'mmol', weight: 'kg' });
   const [loaded, setLoaded] = useState(false);
+
   const [systolic, setSystolic] = useState('');
   const [diastolic, setDiastolic] = useState('');
   const [pulse, setPulse] = useState('');
+  const [value, setValue] = useState('');
+  const [context, setContext] = useState('fasting');
   const [when, setWhen] = useState('');
   const [error, setError] = useState(null);
 
+  const [medName, setMedName] = useState('');
+  const [medTimes, setMedTimes] = useState('');
+  const [medError, setMedError] = useState(null);
+
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY)
-      .then((raw) => setReadings(raw ? JSON.parse(raw) : []))
-      .catch(() => setReadings([]))
-      .finally(() => setLoaded(true));
-    AsyncStorage.getItem(LANG_KEY).then((saved) => {
-      if (saved && LANGUAGES.includes(saved)) setLang(saved);
-    });
+    (async () => {
+      const [rawNew, rawOld, rawLang, rawUnits, rawMeds] = await Promise.all([
+        AsyncStorage.getItem(RECORDS_KEY),
+        AsyncStorage.getItem(OLD_BP_KEY),
+        AsyncStorage.getItem(LANG_KEY),
+        AsyncStorage.getItem(UNITS_KEY),
+        AsyncStorage.getItem(MEDS_KEY),
+      ]);
+      if (rawNew) setRecords(JSON.parse(rawNew));
+      else if (rawOld) setRecords(migrateRecords(JSON.parse(rawOld)));
+      if (rawLang && LANGUAGES.includes(rawLang)) setLang(rawLang);
+      if (rawUnits) setUnits(JSON.parse(rawUnits));
+      if (rawMeds) setMeds(JSON.parse(rawMeds));
+      setLoaded(true);
+    })().catch(() => setLoaded(true));
   }, []);
 
   useEffect(() => {
     if (!loaded) return;
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(readings)).catch(() => {});
-  }, [readings, loaded]);
+    AsyncStorage.setItem(RECORDS_KEY, JSON.stringify(records)).catch(() => {});
+  }, [records, loaded]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    AsyncStorage.setItem(MEDS_KEY, JSON.stringify(meds)).catch(() => {});
+  }, [meds, loaded]);
 
   function switchLanguage(next) {
     setLang(next);
     AsyncStorage.setItem(LANG_KEY, next).catch(() => {});
   }
 
-  const sorted = useMemo(() => sortNewestFirst(readings), [readings]);
-  const latest = sorted[0] ?? null;
-  const week = useMemo(() => averageWeek(readings), [readings]);
-
-  function averageWeek(list) {
-    const since = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    const recent = list.filter((r) => r.takenAt >= since);
-    if (recent.length === 0) return null;
-    const s = recent.reduce((a, r) => a + r.systolic, 0) / recent.length;
-    const d = recent.reduce((a, r) => a + r.diastolic, 0) / recent.length;
-    return { count: recent.length, systolic: Math.round(s), diastolic: Math.round(d) };
+  function changeUnits(patch) {
+    const next = { ...units, ...patch };
+    setUnits(next);
+    AsyncStorage.setItem(UNITS_KEY, JSON.stringify(next)).catch(() => {});
   }
 
+  const sorted = useMemo(() => sortNewestFirst(records), [records]);
+  const shown = historyFilter === 'all' ? sorted : sorted.filter((r) => r.type === historyFilter);
+
   function save() {
-    const v = { systolic, diastolic, pulse };
-    const problem = validate(v);
-    if (problem) return setError(tr(problem));
+    const input = type === TYPES.bp ? { systolic, diastolic, pulse } : { value, context };
+    const check = validateMeasurement(type, input, units);
+    if (check.error) return setError(tr(check.error));
     const date = parseTakenAt(when);
     if (date.error) return setError(tr(date.error));
     setError(null);
-    setReadings((prev) => [makeReading(v, date.takenAt), ...prev]);
+    setRecords((prev) => [makeRecord(type, check.values, date.takenAt), ...prev]);
     setSystolic('');
     setDiastolic('');
     setPulse('');
+    setValue('');
     setWhen('');
     Vibration.vibrate(15);
   }
@@ -132,11 +146,29 @@ export default function App() {
   function remove(id) {
     Alert.alert(tr('deleteTitle'), '', [
       { text: tr('cancel'), style: 'cancel' },
-      { text: tr('delete'), style: 'destructive', onPress: () => setReadings((prev) => prev.filter((r) => r.id !== id)) },
+      { text: tr('delete'), style: 'destructive', onPress: () => setRecords((prev) => prev.filter((r) => r.id !== id)) },
+    ]);
+  }
+
+  function addMed() {
+    const check = validateMed({ name: medName, times: medTimes });
+    if (check.error) return setMedError(tr(check.error));
+    setMedError(null);
+    setMeds((prev) => [makeMed({ name: check.name, times: check.times }), ...prev]);
+    setMedName('');
+    setMedTimes('');
+  }
+
+  function removeMed(id) {
+    Alert.alert(tr('medDelete') + '?', '', [
+      { text: tr('cancel'), style: 'cancel' },
+      { text: tr('delete'), style: 'destructive', onPress: () => setMeds((prev) => prev.filter((m) => m.id !== id)) },
     ]);
   }
 
   const catLabel = (cat) => tr(`cat_${cat}`);
+  const formatDate = (ms) => new Date(ms).toLocaleString(localeTag(lang));
+  const typeLabel = (k) => tr(`type_${k}`);
 
   return (
     <View style={[styles.root, { backgroundColor: t.bg }]}>
@@ -146,11 +178,7 @@ export default function App() {
           <Text style={[styles.title, { color: t.text }]}>{tr('appTitle')}</Text>
           <View style={[styles.langSwitch, { borderColor: t.border }]}>
             {LANGUAGES.map((code) => (
-              <TouchableOpacity
-                key={code}
-                onPress={() => switchLanguage(code)}
-                style={[styles.langBtn, lang === code && { backgroundColor: t.accent }]}
-              >
+              <TouchableOpacity key={code} onPress={() => switchLanguage(code)} style={[styles.langBtn, lang === code && { backgroundColor: t.accent }]}>
                 <Text style={[styles.langText, { color: lang === code ? '#fff' : t.muted }]}>{code.toUpperCase()}</Text>
               </TouchableOpacity>
             ))}
@@ -159,14 +187,57 @@ export default function App() {
 
         {tab === 'input' && (
           <>
-            <Hero latest={latest} t={t} tr={tr} catLabel={catLabel} fmt={formatDate} />
+            <Chips
+              t={t}
+              items={Object.values(TYPES).map((k) => ({ key: k, label: typeLabel(k), icon: TYPE_ICONS[k] }))}
+              active={type}
+              onPick={setType}
+            />
+            <Hero type={type} records={records} t={t} tr={tr} catLabel={catLabel} units={units} lang={lang} fmt={formatDate} />
             <Card t={t}>
-              <Text style={[styles.h2, { color: t.text }]}>{tr('newReading')}</Text>
-              <View style={styles.row}>
-                <Field label={tr('systolic')} t={t} value={systolic} onChange={setSystolic} />
-                <Field label={tr('diastolic')} t={t} value={diastolic} onChange={setDiastolic} />
-                <Field label={tr('pulse')} t={t} value={pulse} onChange={setPulse} />
-              </View>
+              <Text style={[styles.h2, { color: t.text }]}>{typeLabel(type)}</Text>
+              {type === TYPES.bp ? (
+                <View style={styles.row}>
+                  <Field label={tr('systolic')} t={t} value={systolic} onChange={setSystolic} />
+                  <Field label={tr('diastolic')} t={t} value={diastolic} onChange={setDiastolic} />
+                  <Field label={tr('pulse')} t={t} value={pulse} onChange={setPulse} />
+                </View>
+              ) : (
+                <>
+                  <Field
+                    label={`${typeLabel(type)}, ${unitLabel(type, units, lang)}`}
+                    t={t}
+                    value={value}
+                    onChange={setValue}
+                  />
+                  <Chips
+                    t={t}
+                    small
+                    items={[
+                      type === TYPES.glucose
+                        ? { key: 'mmol', label: unitLabel(TYPES.glucose, { glucose: 'mmol' }, lang) }
+                        : { key: 'kg', label: unitLabel(TYPES.weight, { weight: 'kg' }, lang) },
+                      type === TYPES.glucose
+                        ? { key: 'mgdl', label: unitLabel(TYPES.glucose, { glucose: 'mgdl' }, lang) }
+                        : { key: 'lb', label: unitLabel(TYPES.weight, { weight: 'lb' }, lang) },
+                    ]}
+                    active={type === TYPES.glucose ? units.glucose : units.weight}
+                    onPick={(k) => changeUnits(type === TYPES.glucose ? { glucose: k } : { weight: k })}
+                  />
+                  {type === TYPES.glucose ? (
+                    <>
+                      <Text style={[styles.label, { color: t.muted }]}>{tr('glucoseContext')}</Text>
+                      <Chips
+                        t={t}
+                        small
+                        items={GLUCOSE_CONTEXTS.map((c) => ({ key: c, label: tr(`ctx_${c}`) }))}
+                        active={context}
+                        onPick={setContext}
+                      />
+                    </>
+                  ) : null}
+                </>
+              )}
               <Field label={tr('dateLabel')} t={t} value={when} onChange={setWhen} placeholder="05.10.2026 08:30" text />
               {error ? <Text style={styles.error}>{error}</Text> : null}
               <TouchableOpacity style={[styles.button, { backgroundColor: t.accent }]} onPress={save}>
@@ -174,56 +245,56 @@ export default function App() {
                 <Text style={styles.buttonText}>{tr('save')}</Text>
               </TouchableOpacity>
             </Card>
-            <Card t={t}>
-              <Text style={[styles.h2, { color: t.text }]}>{tr('weekAverage')}</Text>
-              {week ? (
-                <Text style={[styles.big, { color: t.text }]}>
-                  {week.systolic}/{week.diastolic}
-                  <Text style={[styles.muted, { color: t.muted }]}>  · {tr('records')}: {week.count}</Text>
-                </Text>
-              ) : (
-                <Text style={[styles.muted, { color: t.muted }]}>{tr('noWeek')}</Text>
-              )}
-            </Card>
             <Text style={[styles.disclaimer, { color: t.muted }]}>{tr('disclaimer')}</Text>
           </>
         )}
 
         {tab === 'history' && (
           <>
+            <Chips
+              t={t}
+              small
+              items={[{ key: 'all', label: tr('historyFilterAll') }, ...Object.values(TYPES).map((k) => ({ key: k, label: typeLabel(k) }))]}
+              active={historyFilter}
+              onPick={setHistoryFilter}
+            />
             <Card t={t}>
-              {sorted.length === 0 ? (
+              {shown.length === 0 ? (
                 <View style={styles.empty}>
-                  <Ionicons name="heart-outline" size={40} color={t.muted} />
+                  <Ionicons name="document-text-outline" size={40} color={t.muted} />
                   <Text style={[styles.muted, { color: t.muted }]}>{tr('historyEmpty')}</Text>
                 </View>
               ) : (
-                sorted.map((r) => {
-                  const cat = classify(r.systolic, r.diastolic);
+                shown.map((r) => {
+                  const cat = r.type === TYPES.bp ? classify(r.values.systolic, r.values.diastolic) : null;
+                  const color = cat ? CATEGORY_COLORS[cat] : t.accent;
                   return (
                     <TouchableOpacity key={r.id} style={[styles.item, { borderTopColor: t.border }]} onLongPress={() => remove(r.id)}>
-                      <View style={[styles.dot, { backgroundColor: CATEGORY_COLORS[cat] }]} />
+                      <Ionicons name={TYPE_ICONS[r.type]} size={22} color={color} />
                       <View style={{ flex: 1 }}>
                         <Text style={[styles.itemMain, { color: t.text }]}>
-                          {r.systolic}/{r.diastolic}
-                          {r.pulse ? <Text style={[styles.muted, { color: t.muted }]}>  · {tr('pulseShort', { v: r.pulse })}</Text> : null}
+                          {formatValue(r, units)} <Text style={[styles.muted, { color: t.muted }]}>{unitLabel(r.type, units, lang)}</Text>
+                          {r.type === TYPES.bp && r.values.pulse ? <Text style={[styles.muted, { color: t.muted }]}>  · {tr('pulseShort', { v: r.values.pulse })}</Text> : null}
                         </Text>
-                        <Text style={[styles.itemDate, { color: t.muted }]}>{formatDate(r.takenAt)}</Text>
-                        <Text style={[styles.badge, { color: CATEGORY_COLORS[cat] }]}>{catLabel(cat)}</Text>
+                        <Text style={[styles.itemDate, { color: t.muted }]}>
+                          {typeLabel(r.type)} · {formatDate(r.takenAt)}
+                        </Text>
+                        {cat ? <Text style={[styles.badge, { color }]}>{catLabel(cat)}</Text> : null}
+                        {r.type === TYPES.glucose ? <Text style={[styles.muted, { color: t.muted, fontSize: 12 }]}>{tr(`ctx_${r.values.context}`)}</Text> : null}
                       </View>
                     </TouchableOpacity>
                   );
                 })
               )}
-              {sorted.length > 0 ? <Text style={[styles.muted, { color: t.muted, marginTop: 6 }]}>{tr('deleteHint')}</Text> : null}
+              {shown.length > 0 ? <Text style={[styles.muted, { color: t.muted, marginTop: 6 }]}>{tr('deleteHint')}</Text> : null}
             </Card>
             <Card t={t}>
               <Text style={[styles.h2, { color: t.text }]}>{tr('exportTitle')}</Text>
               <Text style={[styles.muted, { color: t.muted }]}>{tr('exportHint')}</Text>
               <TouchableOpacity
-                style={[styles.button, { backgroundColor: readings.length ? t.accent : t.muted }]}
-                disabled={readings.length === 0}
-                onPress={() => Share.share({ title: tr('shareTitle'), message: toCsv(readings, lang) })}
+                style={[styles.button, { backgroundColor: records.length ? t.accent : t.muted }]}
+                disabled={records.length === 0}
+                onPress={() => Share.share({ title: tr('shareTitle'), message: toCsvRecords(records, lang, units, classify) })}
               >
                 <Ionicons name="share-outline" size={20} color="#fff" />
                 <Text style={styles.buttonText}>{tr('share')}</Text>
@@ -232,7 +303,48 @@ export default function App() {
           </>
         )}
 
-        {tab === 'charts' && <Chart readings={readings} t={t} tr={tr} catLabel={catLabel} />}
+        {tab === 'charts' && (
+          <>
+            <Chart readings={ofType(records, TYPES.bp)} t={t} tr={tr} catLabel={catLabel} />
+            <Card t={t}>
+              <Text style={[styles.h2, { color: t.text }]}>{tr('glucoseAverage')}</Text>
+              <Text style={[styles.big, { color: t.text }]}>{glucoseWeekAverage(records, units, lang)}</Text>
+            </Card>
+          </>
+        )}
+
+        {tab === 'meds' && (
+          <>
+            <Card t={t}>
+              <Text style={[styles.h2, { color: t.text }]}>{tr('medsTitle')}</Text>
+              <Text style={[styles.muted, { color: t.muted }]}>{tr('medsHint')}</Text>
+              <Field label={tr('medName')} t={t} value={medName} onChange={setMedName} text />
+              <Field label={tr('medTimes')} t={t} value={medTimes} onChange={setMedTimes} placeholder="08:00, 20:00" text />
+              {medError ? <Text style={styles.error}>{medError}</Text> : null}
+              <TouchableOpacity style={[styles.button, { backgroundColor: t.accent }]} onPress={addMed}>
+                <Ionicons name="add-circle-outline" size={20} color="#fff" />
+                <Text style={styles.buttonText}>{tr('medAdd')}</Text>
+              </TouchableOpacity>
+              <Text style={[styles.muted, { color: t.muted, fontSize: 12 }]}>{tr('medRemindersSoon')}</Text>
+            </Card>
+            <Card t={t}>
+              {meds.length === 0 ? (
+                <Text style={[styles.muted, { color: t.muted }]}>{tr('medEmpty')}</Text>
+              ) : (
+                meds.map((m) => (
+                  <TouchableOpacity key={m.id} style={[styles.item, { borderTopColor: t.border }]} onLongPress={() => removeMed(m.id)}>
+                    <Ionicons name="medkit-outline" size={22} color={t.accent} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.itemMain, { color: t.text }]}>{m.name}</Text>
+                      <Text style={[styles.muted, { color: t.muted }]}>{m.times.join(', ')}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))
+              )}
+              {meds.length > 0 ? <Text style={[styles.muted, { color: t.muted, marginTop: 6 }]}>{tr('deleteHint')}</Text> : null}
+            </Card>
+          </>
+        )}
       </ScrollView>
 
       <View style={[styles.tabBar, { backgroundColor: t.tabBar, borderTopColor: t.border }]}>
@@ -241,7 +353,7 @@ export default function App() {
           const color = active ? t.accent : t.muted;
           return (
             <TouchableOpacity key={item.key} style={styles.tabItem} onPress={() => setTab(item.key)}>
-              <Ionicons name={item.icon} size={24} color={color} />
+              <Ionicons name={item.icon} size={22} color={color} />
               <Text style={[styles.tabLabel, { color }]}>{tr(item.label)}</Text>
             </TouchableOpacity>
           );
@@ -249,13 +361,19 @@ export default function App() {
       </View>
     </View>
   );
-
-  function formatDate(ms) {
-    return new Date(ms).toLocaleString(localeTag(lang));
-  }
 }
 
-function Hero({ latest, t, tr, catLabel, fmt }) {
+function glucoseWeekAverage(records, units, lang) {
+  const since = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const recent = ofType(records, TYPES.glucose).filter((r) => r.takenAt >= since);
+  if (recent.length === 0) return '—';
+  const avg = recent.reduce((a, r) => a + r.values.value, 0) / recent.length;
+  const shown = units.glucose === 'mgdl' ? Math.round(avg * 18.0156) : avg.toFixed(1);
+  return `${shown} ${unitLabel(TYPES.glucose, units, lang)}`;
+}
+
+function Hero({ type, records, t, tr, catLabel, units, lang, fmt }) {
+  const latest = sortNewestFirst(ofType(records, type))[0];
   if (!latest) {
     return (
       <Card t={t}>
@@ -263,17 +381,39 @@ function Hero({ latest, t, tr, catLabel, fmt }) {
       </Card>
     );
   }
-  const cat = classify(latest.systolic, latest.diastolic);
-  // На жёлтом фоне белый текст плохо читается: берём тёмный.
+  const cat = type === TYPES.bp ? classify(latest.values.systolic, latest.values.diastolic) : null;
+  const bg = cat ? CATEGORY_COLORS[cat] : t.accent;
   const ink = cat === 'elevated' ? '#1c1917' : '#ffffff';
   return (
-    <View style={[styles.hero, { backgroundColor: CATEGORY_COLORS[cat] }]}>
+    <View style={[styles.hero, { backgroundColor: bg }]}>
       <Text style={[styles.heroLabel, { color: ink, opacity: 0.85 }]}>{tr('lastReading')}</Text>
       <Text style={[styles.heroValue, { color: ink }]}>
-        {latest.systolic}/{latest.diastolic}
+        {formatValue(latest, units)}
+        <Text style={[styles.heroUnit, { color: ink }]}> {unitLabel(type, units, lang)}</Text>
       </Text>
-      <Text style={[styles.heroCategory, { color: ink }]}>{catLabel(cat)}</Text>
+      {cat ? <Text style={[styles.heroCategory, { color: ink }]}>{catLabel(cat)}</Text> : null}
+      {type === TYPES.glucose ? <Text style={[styles.heroCategory, { color: ink }]}>{tr(`ctx_${latest.values.context}`)}</Text> : null}
       <Text style={[styles.heroDate, { color: ink, opacity: 0.8 }]}>{fmt(latest.takenAt)}</Text>
+    </View>
+  );
+}
+
+function Chips({ items, active, onPick, t, small }) {
+  return (
+    <View style={styles.chips}>
+      {items.map((it) => {
+        const on = it.key === active;
+        return (
+          <TouchableOpacity
+            key={it.key}
+            onPress={() => onPick(it.key)}
+            style={[styles.chip, small && styles.chipSmall, { borderColor: t.border, backgroundColor: on ? t.accent : t.card }]}
+          >
+            {it.icon ? <Ionicons name={it.icon} size={16} color={on ? '#fff' : t.muted} /> : null}
+            <Text style={[styles.chipText, { color: on ? '#fff' : t.text }]}>{it.label}</Text>
+          </TouchableOpacity>
+        );
+      })}
     </View>
   );
 }
@@ -288,7 +428,7 @@ function Field({ label, t, value, onChange, placeholder, text }) {
         onChangeText={onChange}
         placeholder={placeholder}
         placeholderTextColor={t.muted}
-        keyboardType={text ? 'default' : 'number-pad'}
+        keyboardType={text ? 'default' : 'decimal-pad'}
         autoCapitalize="none"
       />
     </View>
@@ -299,12 +439,9 @@ function Card({ children, t }) {
   return <View style={[styles.card, { backgroundColor: t.card }]}>{children}</View>;
 }
 
-// Столбик на каждое измерение: от нижнего до верхнего давления. Цвет — категория.
+// Столбик на каждое давление: от нижнего до верхнего. Цвет — категория.
 function Chart({ readings, t, tr, catLabel }) {
-  const points = useMemo(() => {
-    return [...readings].sort((a, b) => a.takenAt - b.takenAt).slice(-CHART_POINTS);
-  }, [readings]);
-
+  const points = useMemo(() => [...readings].sort((a, b) => a.takenAt - b.takenAt).slice(-CHART_POINTS), [readings]);
   if (points.length === 0) {
     return (
       <Card t={t}>
@@ -315,12 +452,10 @@ function Chart({ readings, t, tr, catLabel }) {
       </Card>
     );
   }
-
   const scale = (v) => {
     const clamped = Math.min(CHART_MAX, Math.max(CHART_MIN, v));
     return ((clamped - CHART_MIN) / (CHART_MAX - CHART_MIN)) * CHART_HEIGHT;
   };
-
   return (
     <Card t={t}>
       <Text style={[styles.h2, { color: t.text }]}>{tr('chartTitle', { n: points.length })}</Text>
@@ -333,9 +468,9 @@ function Chart({ readings, t, tr, catLabel }) {
         ))}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.bars}>
           {points.map((r) => {
-            const cat = classify(r.systolic, r.diastolic);
-            const bottom = scale(r.diastolic);
-            const height = Math.max(4, scale(r.systolic) - bottom);
+            const cat = classify(r.values.systolic, r.values.diastolic);
+            const bottom = scale(r.values.diastolic);
+            const height = Math.max(4, scale(r.values.systolic) - bottom);
             return (
               <View key={r.id} style={styles.barCol}>
                 <View style={[styles.bar, { bottom, height, backgroundColor: CATEGORY_COLORS[cat] }]} />
@@ -360,10 +495,14 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   content: { padding: 16, paddingTop: 60, paddingBottom: 110, gap: 12 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  title: { fontSize: 26, fontWeight: '700', flexShrink: 1, marginRight: 8 },
+  title: { fontSize: 24, fontWeight: '700', flexShrink: 1, marginRight: 8 },
   langSwitch: { flexDirection: 'row', borderWidth: 1, borderRadius: 8, overflow: 'hidden' },
   langBtn: { paddingVertical: 6, paddingHorizontal: 10 },
   langText: { fontSize: 13, fontWeight: '700' },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: 20, paddingVertical: 8, paddingHorizontal: 12 },
+  chipSmall: { paddingVertical: 6, paddingHorizontal: 10 },
+  chipText: { fontSize: 14, fontWeight: '600' },
   card: { borderRadius: 16, padding: 16, gap: 10 },
   h2: { fontSize: 16, fontWeight: '600' },
   big: { fontSize: 30, fontWeight: '700' },
@@ -378,7 +517,8 @@ const styles = StyleSheet.create({
   error: { color: '#ef4444', fontSize: 14 },
   hero: { borderRadius: 20, padding: 20, gap: 4 },
   heroLabel: { fontSize: 14, fontWeight: '500' },
-  heroValue: { fontSize: 52, fontWeight: '800' },
+  heroValue: { fontSize: 48, fontWeight: '800' },
+  heroUnit: { fontSize: 18, fontWeight: '600' },
   heroCategory: { fontSize: 16, fontWeight: '600' },
   heroDate: { fontSize: 13, marginTop: 4 },
   empty: { alignItems: 'center', gap: 8, paddingVertical: 20 },
@@ -398,5 +538,5 @@ const styles = StyleSheet.create({
   legendText: { fontSize: 11 },
   tabBar: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', borderTopWidth: 1, paddingBottom: 20, paddingTop: 8 },
   tabItem: { flex: 1, alignItems: 'center', gap: 2 },
-  tabLabel: { fontSize: 12, fontWeight: '500' },
+  tabLabel: { fontSize: 11, fontWeight: '500' },
 });
