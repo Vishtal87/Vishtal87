@@ -3,7 +3,7 @@ export const LANGUAGES = ['ru', 'en'];
 
 const STRINGS = {
   ru: {
-    appTitle: 'Дневник давления',
+    appTitle: 'Дневник здоровья',
     tabInput: 'Ввод',
     tabHistory: 'История',
     tabCharts: 'Графики',
@@ -48,7 +48,7 @@ const STRINGS = {
     csv_diastolic: 'нижнее',
     csv_pulse: 'пульс',
     csv_category: 'категория',
-    shareTitle: 'Дневник давления',
+    shareTitle: 'Дневник здоровья',
     langSwitch: 'Язык',
     tabMeds: 'Лекарства',
     type_bp: 'Давление',
@@ -86,7 +86,7 @@ const STRINGS = {
     unit_lb: 'lb',
   },
   en: {
-    appTitle: 'Blood Pressure Diary',
+    appTitle: 'Health Diary',
     tabInput: 'Log',
     tabHistory: 'History',
     tabCharts: 'Charts',
@@ -131,7 +131,7 @@ const STRINGS = {
     csv_diastolic: 'diastolic',
     csv_pulse: 'pulse',
     csv_category: 'category',
-    shareTitle: 'Blood Pressure Diary',
+    shareTitle: 'Health Diary',
     langSwitch: 'Language',
     tabMeds: 'Medicines',
     type_bp: 'Blood pressure',
