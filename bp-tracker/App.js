@@ -54,15 +54,18 @@ const CHART_MAX = 200;
 const CHART_HEIGHT = 220;
 
 const CATEGORY_COLORS = {
-  normal: '#22c55e',
-  elevated: '#eab308',
-  stage1: '#f97316',
-  stage2: '#ef4444',
-  crisis: '#991b1b',
+  normal: '#A3FF12',
+  elevated: '#FFE600',
+  stage1: '#FF9F1C',
+  stage2: '#FF4D6D',
+  crisis: '#7A0000',
 };
 
-const LIGHT = { bg: '#f5f5f4', card: '#ffffff', text: '#1c1917', muted: '#78716c', border: '#e7e5e4', accent: '#2563eb', inputBg: '#ffffff', tabBar: '#ffffff' };
-const DARK = { bg: '#0c0a09', card: '#1c1917', text: '#fafaf9', muted: '#a8a29e', border: '#292524', accent: '#60a5fa', inputBg: '#292524', tabBar: '#1c1917' };
+// Необрутализм: толстые рамки, плоские яркие цвета, жёсткие тени. В тёмной теме рамки и тени белые.
+const LIGHT = { bg: '#FFF6D6', card: '#FFFFFF', text: '#000000', muted: '#3f3f46', border: '#000000', shadow: '#000000', accent: '#FF3D8B', inputBg: '#FFFFFF', tabBar: '#FFFFFF' };
+const DARK = { bg: '#121212', card: '#1E1E1E', text: '#FFFFFF', muted: '#D4D4D8', border: '#FFFFFF', shadow: '#FFFFFF', accent: '#FFE600', inputBg: '#262626', tabBar: '#1E1E1E' };
+const LINE = 3;
+const SHADOW = 6;
 
 const TABS = [
   { key: 'input', label: 'tabInput', icon: 'add-circle-outline' },
@@ -628,9 +631,10 @@ function Hero({ type, records, t, tr, catLabel, units, lang, fmt }) {
   }
   const cat = type === TYPES.bp ? classify(latest.values.systolic, latest.values.diastolic) : null;
   const bg = cat ? CATEGORY_COLORS[cat] : t.accent;
-  const ink = cat === 'elevated' ? '#1c1917' : '#ffffff';
+  const ink = cat === 'crisis' ? '#ffffff' : '#000000';
   return (
-    <View style={[styles.hero, { backgroundColor: bg }]}>
+    <Shadowed t={t}>
+    <View style={[styles.hero, { backgroundColor: bg, borderColor: t.border }]}>
       <Text style={[styles.heroLabel, { color: ink, opacity: 0.85 }]}>{tr('lastReading')}</Text>
       <Text style={[styles.heroValue, { color: ink }]}>
         {formatValue(latest, units)}
@@ -640,6 +644,7 @@ function Hero({ type, records, t, tr, catLabel, units, lang, fmt }) {
       {type === TYPES.glucose ? <Text style={[styles.heroCategory, { color: ink }]}>{tr(`ctx_${latest.values.context}`)}</Text> : null}
       <Text style={[styles.heroDate, { color: ink, opacity: 0.8 }]}>{fmt(latest.takenAt)}</Text>
     </View>
+    </Shadowed>
   );
 }
 
@@ -652,10 +657,10 @@ function Chips({ items, active, onPick, t, small }) {
           <TouchableOpacity
             key={it.key}
             onPress={() => onPick(it.key)}
-            style={[styles.chip, small && styles.chipSmall, { borderColor: t.border, backgroundColor: on ? t.accent : t.card }]}
+            style={[styles.chip, small && styles.chipSmall, { borderColor: t.border, backgroundColor: on ? '#FFE600' : t.card }]}
           >
-            {it.icon ? <Ionicons name={it.icon} size={16} color={on ? '#fff' : t.muted} /> : null}
-            <Text style={[styles.chipText, { color: on ? '#fff' : t.text }]}>{it.label}</Text>
+            {it.icon ? <Ionicons name={it.icon} size={16} color="#000" /> : null}
+            <Text style={[styles.chipText, { color: '#000' }]}>{it.label}</Text>
           </TouchableOpacity>
         );
       })}
@@ -680,8 +685,22 @@ function Field({ label, t, value, onChange, placeholder, text }) {
   );
 }
 
+// Жёсткая тень: копия блока смещена вправо-вниз под ним.
+function Shadowed({ children, t, style }) {
+  return (
+    <View style={[{ marginRight: SHADOW, marginBottom: SHADOW }, style]}>
+      <View style={{ position: 'absolute', top: SHADOW, bottom: -SHADOW, left: SHADOW, right: -SHADOW, backgroundColor: t.shadow }} />
+      {children}
+    </View>
+  );
+}
+
 function Card({ children, t }) {
-  return <View style={[styles.card, { backgroundColor: t.card }]}>{children}</View>;
+  return (
+    <Shadowed t={t}>
+      <View style={[styles.card, { backgroundColor: t.card, borderColor: t.border }]}>{children}</View>
+    </Shadowed>
+  );
 }
 
 // Столбик на каждое давление: от нижнего до верхнего. Цвет — категория.
@@ -740,51 +759,51 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   content: { padding: 16, paddingTop: 60, paddingBottom: 110, gap: 12 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  title: { fontSize: 24, fontWeight: '700', flexShrink: 1, marginRight: 8 },
-  langSwitch: { flexDirection: 'row', borderWidth: 1, borderRadius: 8, overflow: 'hidden' },
+  title: { fontSize: 26, fontWeight: '900', textTransform: 'uppercase', flexShrink: 1, marginRight: 8 },
+  langSwitch: { flexDirection: 'row', borderWidth: LINE, borderRadius: 0, overflow: 'hidden' },
   langBtn: { paddingVertical: 6, paddingHorizontal: 10 },
-  langText: { fontSize: 13, fontWeight: '700' },
+  langText: { fontSize: 13, fontWeight: '900' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: 20, paddingVertical: 8, paddingHorizontal: 12 },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: LINE, borderRadius: 0, paddingVertical: 8, paddingHorizontal: 12 },
   chipSmall: { paddingVertical: 6, paddingHorizontal: 10 },
-  chipText: { fontSize: 14, fontWeight: '600' },
-  card: { borderRadius: 16, padding: 16, gap: 10 },
-  h2: { fontSize: 16, fontWeight: '600' },
+  chipText: { fontSize: 14, fontWeight: '800' },
+  card: { borderRadius: 0, borderWidth: LINE, padding: 16, gap: 10 },
+  h2: { fontSize: 17, fontWeight: '900', textTransform: 'uppercase' },
   big: { fontSize: 30, fontWeight: '700' },
   muted: { fontSize: 14 },
   disclaimer: { fontSize: 12, textAlign: 'center', marginTop: 4 },
   row: { flexDirection: 'row', gap: 8 },
   field: { flex: 1, minWidth: 0, gap: 4 },
   label: { fontSize: 12, fontWeight: '500' },
-  input: { borderWidth: 1, borderRadius: 10, padding: 12, fontSize: 17, minWidth: 0 },
-  button: { flexDirection: 'row', gap: 8, borderRadius: 12, padding: 14, alignItems: 'center', justifyContent: 'center' },
-  buttonText: { color: '#fff', fontWeight: '600', fontSize: 16 },
+  input: { borderWidth: LINE, borderRadius: 0, padding: 12, fontSize: 17, minWidth: 0 },
+  button: { flexDirection: 'row', gap: 8, borderRadius: 0, borderWidth: LINE, borderColor: '#000', padding: 14, alignItems: 'center', justifyContent: 'center' },
+  buttonText: { color: '#000', fontWeight: '900', fontSize: 16, textTransform: 'uppercase' },
   error: { color: '#ef4444', fontSize: 14 },
-  hero: { borderRadius: 20, padding: 20, gap: 4 },
+  hero: { borderRadius: 0, borderWidth: LINE, padding: 20, gap: 4 },
   heroLabel: { fontSize: 14, fontWeight: '500' },
-  heroValue: { fontSize: 48, fontWeight: '800' },
+  heroValue: { fontSize: 52, fontWeight: '900' },
   heroUnit: { fontSize: 18, fontWeight: '600' },
   heroCategory: { fontSize: 16, fontWeight: '600' },
   heroDate: { fontSize: 13, marginTop: 4 },
   empty: { alignItems: 'center', gap: 8, paddingVertical: 20 },
-  item: { flexDirection: 'row', gap: 12, alignItems: 'center', borderTopWidth: 1, paddingVertical: 12 },
-  dot: { width: 10, height: 10, borderRadius: 5 },
+  item: { flexDirection: 'row', gap: 12, alignItems: 'center', borderTopWidth: 2, paddingVertical: 12 },
+  dot: { width: 12, height: 12, borderRadius: 0, borderWidth: 2, borderColor: '#000' },
   itemMain: { fontSize: 18, fontWeight: '600' },
   itemDate: { fontSize: 13, marginTop: 2 },
   badge: { fontSize: 13, fontWeight: '600', marginTop: 2 },
   chartWrap: { height: CHART_HEIGHT + 8, marginTop: 8, justifyContent: 'flex-end' },
-  refLine: { position: 'absolute', left: 0, right: 0, borderTopWidth: 1, borderStyle: 'dashed' },
+  refLine: { position: 'absolute', left: 0, right: 0, borderTopWidth: 2, borderStyle: 'dashed' },
   refLabel: { fontSize: 11, position: 'absolute', right: 0, top: -14 },
   bars: { alignItems: 'flex-end', gap: 8, paddingRight: 8, height: CHART_HEIGHT },
   barCol: { width: 14, height: CHART_HEIGHT, justifyContent: 'flex-end' },
-  bar: { position: 'absolute', left: 0, right: 0, borderRadius: 7 },
+  bar: { position: 'absolute', left: 0, right: 0, borderRadius: 0, borderWidth: 2, borderColor: '#000' },
   legend: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 8 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   legendText: { fontSize: 11 },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  proBadge: { backgroundColor: '#7c3aed', borderRadius: 6, paddingVertical: 2, paddingHorizontal: 8 },
-  proBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
-  tabBar: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', borderTopWidth: 1, paddingBottom: 20, paddingTop: 8 },
+  proBadge: { backgroundColor: '#B388FF', borderRadius: 0, borderWidth: 2, borderColor: '#000', paddingVertical: 2, paddingHorizontal: 8 },
+  proBadgeText: { color: '#000', fontSize: 11, fontWeight: '900' },
+  tabBar: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', borderTopWidth: LINE, paddingBottom: 20, paddingTop: 8 },
   tabItem: { flex: 1, alignItems: 'center', gap: 2 },
-  tabLabel: { fontSize: 11, fontWeight: '500' },
+  tabLabel: { fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
 });
