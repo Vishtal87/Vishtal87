@@ -25,7 +25,8 @@ export class SamsungDevice {
   }
 
   url() {
-    const name = Buffer.from(APP_NAME).toString('base64');
+    // btoa есть и в Node 22, и в React Native (Buffer в RN нет).
+    const name = btoa(APP_NAME);
     const tokenPart = this.token ? `&token=${encodeURIComponent(this.token)}` : '';
     return `ws://${this.host}:${SAMSUNG_PORT}/api/v2/channels/samsung.remote.control?name=${name}${tokenPart}`;
   }
