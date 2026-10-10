@@ -748,7 +748,7 @@ export default function App() {
                 <Text style={styles.buttonText}>{tr('save')}</Text>
               </TouchableOpacity>
               {editingRecord ? (
-                <TouchableOpacity style={[styles.button, { backgroundColor: t.muted }]} onPress={cancelEdit} accessibilityRole="button">
+                <TouchableOpacity style={[styles.button, { backgroundColor: '#E4E4E7' }]} onPress={cancelEdit} accessibilityRole="button">
                   <Text style={styles.buttonText}>{tr('editCancel')}</Text>
                 </TouchableOpacity>
               ) : null}
@@ -807,7 +807,7 @@ export default function App() {
               <Text style={[styles.h2, { color: t.text }]}>{tr('exportTitle')}</Text>
               <Text style={[styles.muted, { color: t.muted }]}>{tr('exportHint')}</Text>
               <TouchableOpacity
-                style={[styles.button, { backgroundColor: records.length ? t.accent : t.muted }]}
+                style={[styles.button, { backgroundColor: records.length ? t.accent : '#E4E4E7' }]}
                 disabled={records.length === 0}
                 onPress={exportCsv}
                 accessibilityRole="button"
@@ -886,7 +886,7 @@ export default function App() {
               <TouchableOpacity style={[styles.button, { backgroundColor: t.accent }]} onPress={openPaywall} accessibilityRole="button">
                 <Text style={styles.buttonText}>{tr('subscribeButton')}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.button, { backgroundColor: t.muted }]} onPress={restorePurchase} accessibilityRole="button">
+              <TouchableOpacity style={[styles.button, { backgroundColor: '#E4E4E7' }]} onPress={restorePurchase} accessibilityRole="button">
                 <Text style={styles.buttonText}>{tr('restorePurchases')}</Text>
               </TouchableOpacity>
               {SHOW_TEST_PRO ? (
@@ -985,7 +985,7 @@ export default function App() {
                 <Text style={styles.buttonText}>{editingMedId ? tr('save') : tr('medAdd')}</Text>
               </TouchableOpacity>
               {editingMedId ? (
-                <TouchableOpacity style={[styles.button, { backgroundColor: t.muted }]} onPress={cancelEditMed} accessibilityRole="button">
+                <TouchableOpacity style={[styles.button, { backgroundColor: '#E4E4E7' }]} onPress={cancelEditMed} accessibilityRole="button">
                   <Text style={styles.buttonText}>{tr('editCancel')}</Text>
                 </TouchableOpacity>
               ) : null}
