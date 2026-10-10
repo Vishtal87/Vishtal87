@@ -15,8 +15,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import {
-  CATEGORY_LABELS,
-  averageForDays,
   classify,
   makeReading,
   parseTakenAt,
@@ -24,8 +22,10 @@ import {
   toCsv,
   validate,
 } from './src/bp.mjs';
+import { translate, localeTag, detectLanguage, LANGUAGES } from './src/i18n.mjs';
 
 const STORAGE_KEY = 'bp-readings-v1';
+const LANG_KEY = 'bp-lang-v1';
 const CHART_POINTS = 30;
 const CHART_MIN = 40;
 const CHART_MAX = 200;
@@ -62,14 +62,16 @@ const DARK = {
 };
 
 const TABS = [
-  { key: 'input', label: 'Ввод', icon: 'add-circle-outline' },
-  { key: 'history', label: 'История', icon: 'list-outline' },
-  { key: 'charts', label: 'Графики', icon: 'bar-chart-outline' },
+  { key: 'input', label: 'tabInput', icon: 'add-circle-outline' },
+  { key: 'history', label: 'tabHistory', icon: 'list-outline' },
+  { key: 'charts', label: 'tabCharts', icon: 'bar-chart-outline' },
 ];
 
 export default function App() {
   const scheme = useColorScheme();
   const t = scheme === 'dark' ? DARK : LIGHT;
+  const [lang, setLang] = useState(detectLanguage(Intl.DateTimeFormat().resolvedOptions().locale));
+  const tr = (key, vars) => translate(lang, key, vars);
   const [tab, setTab] = useState('input');
   const [readings, setReadings] = useState([]);
   const [loaded, setLoaded] = useState(false);
@@ -84,6 +86,9 @@ export default function App() {
       .then((raw) => setReadings(raw ? JSON.parse(raw) : []))
       .catch(() => setReadings([]))
       .finally(() => setLoaded(true));
+    AsyncStorage.getItem(LANG_KEY).then((saved) => {
+      if (saved && LANGUAGES.includes(saved)) setLang(saved);
+    });
   }, []);
 
   useEffect(() => {
@@ -91,16 +96,30 @@ export default function App() {
     AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(readings)).catch(() => {});
   }, [readings, loaded]);
 
+  function switchLanguage(next) {
+    setLang(next);
+    AsyncStorage.setItem(LANG_KEY, next).catch(() => {});
+  }
+
   const sorted = useMemo(() => sortNewestFirst(readings), [readings]);
   const latest = sorted[0] ?? null;
-  const week = useMemo(() => averageForDays(readings, 7), [readings]);
+  const week = useMemo(() => averageWeek(readings), [readings]);
+
+  function averageWeek(list) {
+    const since = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const recent = list.filter((r) => r.takenAt >= since);
+    if (recent.length === 0) return null;
+    const s = recent.reduce((a, r) => a + r.systolic, 0) / recent.length;
+    const d = recent.reduce((a, r) => a + r.diastolic, 0) / recent.length;
+    return { count: recent.length, systolic: Math.round(s), diastolic: Math.round(d) };
+  }
 
   function save() {
     const v = { systolic, diastolic, pulse };
     const problem = validate(v);
-    if (problem) return setError(problem);
+    if (problem) return setError(tr(problem));
     const date = parseTakenAt(when);
-    if (date.error) return setError(date.error);
+    if (date.error) return setError(tr(date.error));
     setError(null);
     setReadings((prev) => [makeReading(v, date.takenAt), ...prev]);
     setSystolic('');
@@ -111,49 +130,62 @@ export default function App() {
   }
 
   function remove(id) {
-    Alert.alert('Удалить запись?', '', [
-      { text: 'Отмена', style: 'cancel' },
-      { text: 'Удалить', style: 'destructive', onPress: () => setReadings((prev) => prev.filter((r) => r.id !== id)) },
+    Alert.alert(tr('deleteTitle'), '', [
+      { text: tr('cancel'), style: 'cancel' },
+      { text: tr('delete'), style: 'destructive', onPress: () => setReadings((prev) => prev.filter((r) => r.id !== id)) },
     ]);
   }
+
+  const catLabel = (cat) => tr(`cat_${cat}`);
 
   return (
     <View style={[styles.root, { backgroundColor: t.bg }]}>
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={[styles.title, { color: t.text }]}>Дневник давления</Text>
+        <View style={styles.header}>
+          <Text style={[styles.title, { color: t.text }]}>{tr('appTitle')}</Text>
+          <View style={[styles.langSwitch, { borderColor: t.border }]}>
+            {LANGUAGES.map((code) => (
+              <TouchableOpacity
+                key={code}
+                onPress={() => switchLanguage(code)}
+                style={[styles.langBtn, lang === code && { backgroundColor: t.accent }]}
+              >
+                <Text style={[styles.langText, { color: lang === code ? '#fff' : t.muted }]}>{code.toUpperCase()}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
 
         {tab === 'input' && (
           <>
-            <Hero latest={latest} t={t} />
+            <Hero latest={latest} t={t} tr={tr} catLabel={catLabel} fmt={formatDate} />
             <Card t={t}>
-              <Text style={[styles.h2, { color: t.text }]}>Новое измерение</Text>
+              <Text style={[styles.h2, { color: t.text }]}>{tr('newReading')}</Text>
               <View style={styles.row}>
-                <Field label="Верхнее" t={t} value={systolic} onChange={setSystolic} />
-                <Field label="Нижнее" t={t} value={diastolic} onChange={setDiastolic} />
-                <Field label="Пульс" t={t} value={pulse} onChange={setPulse} />
+                <Field label={tr('systolic')} t={t} value={systolic} onChange={setSystolic} />
+                <Field label={tr('diastolic')} t={t} value={diastolic} onChange={setDiastolic} />
+                <Field label={tr('pulse')} t={t} value={pulse} onChange={setPulse} />
               </View>
-              <Field label="Дата и время (необязательно)" t={t} value={when} onChange={setWhen} placeholder="05.10.2026 08:30" text />
+              <Field label={tr('dateLabel')} t={t} value={when} onChange={setWhen} placeholder="05.10.2026 08:30" text />
               {error ? <Text style={styles.error}>{error}</Text> : null}
               <TouchableOpacity style={[styles.button, { backgroundColor: t.accent }]} onPress={save}>
                 <Ionicons name="checkmark-circle" size={20} color="#fff" />
-                <Text style={styles.buttonText}>Сохранить</Text>
+                <Text style={styles.buttonText}>{tr('save')}</Text>
               </TouchableOpacity>
             </Card>
             <Card t={t}>
-              <Text style={[styles.h2, { color: t.text }]}>Среднее за 7 дней</Text>
+              <Text style={[styles.h2, { color: t.text }]}>{tr('weekAverage')}</Text>
               {week ? (
                 <Text style={[styles.big, { color: t.text }]}>
                   {week.systolic}/{week.diastolic}
-                  <Text style={[styles.muted, { color: t.muted }]}>  · записей: {week.count}</Text>
+                  <Text style={[styles.muted, { color: t.muted }]}>  · {tr('records')}: {week.count}</Text>
                 </Text>
               ) : (
-                <Text style={[styles.muted, { color: t.muted }]}>Нет записей за неделю</Text>
+                <Text style={[styles.muted, { color: t.muted }]}>{tr('noWeek')}</Text>
               )}
             </Card>
-            <Text style={[styles.disclaimer, { color: t.muted }]}>
-              Приложение показывает категорию по таблице AHA и не ставит диагноз. По лечению обращайтесь к врачу.
-            </Text>
+            <Text style={[styles.disclaimer, { color: t.muted }]}>{tr('disclaimer')}</Text>
           </>
         )}
 
@@ -163,7 +195,7 @@ export default function App() {
               {sorted.length === 0 ? (
                 <View style={styles.empty}>
                   <Ionicons name="heart-outline" size={40} color={t.muted} />
-                  <Text style={[styles.muted, { color: t.muted }]}>Записей пока нет</Text>
+                  <Text style={[styles.muted, { color: t.muted }]}>{tr('historyEmpty')}</Text>
                 </View>
               ) : (
                 sorted.map((r) => {
@@ -174,33 +206,33 @@ export default function App() {
                       <View style={{ flex: 1 }}>
                         <Text style={[styles.itemMain, { color: t.text }]}>
                           {r.systolic}/{r.diastolic}
-                          {r.pulse ? <Text style={[styles.muted, { color: t.muted }]}>  · пульс {r.pulse}</Text> : null}
+                          {r.pulse ? <Text style={[styles.muted, { color: t.muted }]}>  · {tr('pulseShort', { v: r.pulse })}</Text> : null}
                         </Text>
-                        <Text style={[styles.itemDate, { color: t.muted }]}>{new Date(r.takenAt).toLocaleString('ru-RU')}</Text>
-                        <Text style={[styles.badge, { color: CATEGORY_COLORS[cat] }]}>{CATEGORY_LABELS[cat]}</Text>
+                        <Text style={[styles.itemDate, { color: t.muted }]}>{formatDate(r.takenAt)}</Text>
+                        <Text style={[styles.badge, { color: CATEGORY_COLORS[cat] }]}>{catLabel(cat)}</Text>
                       </View>
                     </TouchableOpacity>
                   );
                 })
               )}
-              {sorted.length > 0 ? <Text style={[styles.muted, { color: t.muted, marginTop: 6 }]}>Долгое нажатие — удалить запись</Text> : null}
+              {sorted.length > 0 ? <Text style={[styles.muted, { color: t.muted, marginTop: 6 }]}>{tr('deleteHint')}</Text> : null}
             </Card>
             <Card t={t}>
-              <Text style={[styles.h2, { color: t.text }]}>Экспорт</Text>
-              <Text style={[styles.muted, { color: t.muted }]}>CSV для врача или для себя</Text>
+              <Text style={[styles.h2, { color: t.text }]}>{tr('exportTitle')}</Text>
+              <Text style={[styles.muted, { color: t.muted }]}>{tr('exportHint')}</Text>
               <TouchableOpacity
                 style={[styles.button, { backgroundColor: readings.length ? t.accent : t.muted }]}
                 disabled={readings.length === 0}
-                onPress={() => Share.share({ title: 'Дневник давления', message: toCsv(readings) })}
+                onPress={() => Share.share({ title: tr('shareTitle'), message: toCsv(readings, lang) })}
               >
                 <Ionicons name="share-outline" size={20} color="#fff" />
-                <Text style={styles.buttonText}>Поделиться CSV</Text>
+                <Text style={styles.buttonText}>{tr('share')}</Text>
               </TouchableOpacity>
             </Card>
           </>
         )}
 
-        {tab === 'charts' && <Chart readings={readings} t={t} />}
+        {tab === 'charts' && <Chart readings={readings} t={t} tr={tr} catLabel={catLabel} />}
       </ScrollView>
 
       <View style={[styles.tabBar, { backgroundColor: t.tabBar, borderTopColor: t.border }]}>
@@ -210,20 +242,24 @@ export default function App() {
           return (
             <TouchableOpacity key={item.key} style={styles.tabItem} onPress={() => setTab(item.key)}>
               <Ionicons name={item.icon} size={24} color={color} />
-              <Text style={[styles.tabLabel, { color }]}>{item.label}</Text>
+              <Text style={[styles.tabLabel, { color }]}>{tr(item.label)}</Text>
             </TouchableOpacity>
           );
         })}
       </View>
     </View>
   );
+
+  function formatDate(ms) {
+    return new Date(ms).toLocaleString(localeTag(lang));
+  }
 }
 
-function Hero({ latest, t }) {
+function Hero({ latest, t, tr, catLabel, fmt }) {
   if (!latest) {
     return (
       <Card t={t}>
-        <Text style={[styles.muted, { color: t.muted }]}>Введите первое измерение ниже</Text>
+        <Text style={[styles.muted, { color: t.muted }]}>{tr('firstHint')}</Text>
       </Card>
     );
   }
@@ -232,12 +268,12 @@ function Hero({ latest, t }) {
   const ink = cat === 'elevated' ? '#1c1917' : '#ffffff';
   return (
     <View style={[styles.hero, { backgroundColor: CATEGORY_COLORS[cat] }]}>
-      <Text style={[styles.heroLabel, { color: ink, opacity: 0.85 }]}>Последнее измерение</Text>
+      <Text style={[styles.heroLabel, { color: ink, opacity: 0.85 }]}>{tr('lastReading')}</Text>
       <Text style={[styles.heroValue, { color: ink }]}>
         {latest.systolic}/{latest.diastolic}
       </Text>
-      <Text style={[styles.heroCategory, { color: ink }]}>{CATEGORY_LABELS[cat]}</Text>
-      <Text style={[styles.heroDate, { color: ink, opacity: 0.8 }]}>{new Date(latest.takenAt).toLocaleString('ru-RU')}</Text>
+      <Text style={[styles.heroCategory, { color: ink }]}>{catLabel(cat)}</Text>
+      <Text style={[styles.heroDate, { color: ink, opacity: 0.8 }]}>{fmt(latest.takenAt)}</Text>
     </View>
   );
 }
@@ -264,7 +300,7 @@ function Card({ children, t }) {
 }
 
 // Столбик на каждое измерение: от нижнего до верхнего давления. Цвет — категория.
-function Chart({ readings, t }) {
+function Chart({ readings, t, tr, catLabel }) {
   const points = useMemo(() => {
     return [...readings].sort((a, b) => a.takenAt - b.takenAt).slice(-CHART_POINTS);
   }, [readings]);
@@ -274,7 +310,7 @@ function Chart({ readings, t }) {
       <Card t={t}>
         <View style={styles.empty}>
           <Ionicons name="analytics-outline" size={40} color={t.muted} />
-          <Text style={[styles.muted, { color: t.muted }]}>Графики появятся после первых записей</Text>
+          <Text style={[styles.muted, { color: t.muted }]}>{tr('chartEmpty')}</Text>
         </View>
       </Card>
     );
@@ -287,8 +323,8 @@ function Chart({ readings, t }) {
 
   return (
     <Card t={t}>
-      <Text style={[styles.h2, { color: t.text }]}>Последние {points.length} измерений</Text>
-      <Text style={[styles.muted, { color: t.muted }]}>Столбик — от нижнего до верхнего давления</Text>
+      <Text style={[styles.h2, { color: t.text }]}>{tr('chartTitle', { n: points.length })}</Text>
+      <Text style={[styles.muted, { color: t.muted }]}>{tr('chartHint')}</Text>
       <View style={styles.chartWrap}>
         {[140, 120].map((line) => (
           <View key={line} style={[styles.refLine, { bottom: scale(line), borderColor: t.border }]}>
@@ -312,7 +348,7 @@ function Chart({ readings, t }) {
         {Object.entries(CATEGORY_COLORS).map(([key, color]) => (
           <View key={key} style={styles.legendItem}>
             <View style={[styles.dot, { backgroundColor: color }]} />
-            <Text style={[styles.legendText, { color: t.muted }]}>{CATEGORY_LABELS[key]}</Text>
+            <Text style={[styles.legendText, { color: t.muted }]}>{catLabel(key)}</Text>
           </View>
         ))}
       </View>
@@ -323,7 +359,11 @@ function Chart({ readings, t }) {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   content: { padding: 16, paddingTop: 60, paddingBottom: 110, gap: 12 },
-  title: { fontSize: 28, fontWeight: '700', marginBottom: 4 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  title: { fontSize: 26, fontWeight: '700', flexShrink: 1, marginRight: 8 },
+  langSwitch: { flexDirection: 'row', borderWidth: 1, borderRadius: 8, overflow: 'hidden' },
+  langBtn: { paddingVertical: 6, paddingHorizontal: 10 },
+  langText: { fontSize: 13, fontWeight: '700' },
   card: { borderRadius: 16, padding: 16, gap: 10 },
   h2: { fontSize: 16, fontWeight: '600' },
   big: { fontSize: 30, fontWeight: '700' },
@@ -337,10 +377,10 @@ const styles = StyleSheet.create({
   buttonText: { color: '#fff', fontWeight: '600', fontSize: 16 },
   error: { color: '#ef4444', fontSize: 14 },
   hero: { borderRadius: 20, padding: 20, gap: 4 },
-  heroLabel: { color: 'rgba(255,255,255,0.85)', fontSize: 14, fontWeight: '500' },
-  heroValue: { color: '#fff', fontSize: 52, fontWeight: '800' },
-  heroCategory: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  heroDate: { color: 'rgba(255,255,255,0.8)', fontSize: 13, marginTop: 4 },
+  heroLabel: { fontSize: 14, fontWeight: '500' },
+  heroValue: { fontSize: 52, fontWeight: '800' },
+  heroCategory: { fontSize: 16, fontWeight: '600' },
+  heroDate: { fontSize: 13, marginTop: 4 },
   empty: { alignItems: 'center', gap: 8, paddingVertical: 20 },
   item: { flexDirection: 'row', gap: 12, alignItems: 'center', borderTopWidth: 1, paddingVertical: 12 },
   dot: { width: 10, height: 10, borderRadius: 5 },

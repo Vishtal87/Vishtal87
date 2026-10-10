@@ -1,14 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  CATEGORIES,
-  classify,
-  validate,
-  averageForDays,
-  sortNewestFirst,
-  toCsv,
-  makeReading,
-} from '../src/bp.mjs';
+import { CATEGORIES, classify, validate, averageForDays, sortNewestFirst, toCsv, makeReading, parseTakenAt } from '../src/bp.mjs';
+import { STRINGS, translate, detectLanguage, LANGUAGES } from '../src/i18n.mjs';
 
 test('категории по таблице AHA', () => {
   assert.equal(classify(110, 70), CATEGORIES.NORMAL);
@@ -20,12 +13,12 @@ test('категории по таблице AHA', () => {
   assert.equal(classify(100, 125), CATEGORIES.CRISIS);
 });
 
-test('валидация: границы и порядок значений', () => {
+test('валидация возвращает ключи ошибок', () => {
   assert.equal(validate({ systolic: 120, diastolic: 80, pulse: '' }), null);
-  assert.match(validate({ systolic: 50, diastolic: 80, pulse: '' }), /Верхнее/);
-  assert.match(validate({ systolic: 120, diastolic: 20, pulse: '' }), /Нижнее/);
-  assert.match(validate({ systolic: 80, diastolic: 90, pulse: '' }), /меньше верхнего/);
-  assert.match(validate({ systolic: 120, diastolic: 80, pulse: '300' }), /Пульс/);
+  assert.equal(validate({ systolic: 50, diastolic: 80, pulse: '' }), 'err_systolic');
+  assert.equal(validate({ systolic: 120, diastolic: 20, pulse: '' }), 'err_diastolic');
+  assert.equal(validate({ systolic: 80, diastolic: 90, pulse: '' }), 'err_order');
+  assert.equal(validate({ systolic: 120, diastolic: 80, pulse: '300' }), 'err_pulse');
   assert.equal(validate({ systolic: 120, diastolic: 80, pulse: '72' }), null);
 });
 
@@ -46,15 +39,19 @@ test('сортировка: новые сверху', () => {
   assert.deepEqual(sorted.map((r) => r.takenAt), [3, 2, 1]);
 });
 
-test('CSV: заголовок, строки, пустой пульс и категория', () => {
-  const csv = toCsv([
+test('CSV на русском и английском', () => {
+  const readings = [
     { takenAt: Date.parse('2026-10-01T08:00:00Z'), systolic: 150, diastolic: 95, pulse: null },
     { takenAt: Date.parse('2026-10-02T08:00:00Z'), systolic: 118, diastolic: 76, pulse: 64 },
-  ]);
-  const lines = csv.split('\n');
-  assert.equal(lines[0], 'дата,верхнее,нижнее,пульс,категория');
-  assert.equal(lines[1], '2026-10-02T08:00:00.000Z,118,76,64,Нормальное');
-  assert.equal(lines[2], '2026-10-01T08:00:00.000Z,150,95,,Гипертензия 2 степени');
+  ];
+  const ru = toCsv(readings, 'ru').split('\n');
+  assert.equal(ru[0], 'дата,верхнее,нижнее,пульс,категория');
+  assert.equal(ru[1], '2026-10-02T08:00:00.000Z,118,76,64,Нормальное');
+  assert.equal(ru[2], '2026-10-01T08:00:00.000Z,150,95,,Гипертензия 2 степени');
+  const en = toCsv(readings, 'en').split('\n');
+  assert.equal(en[0], 'date,systolic,diastolic,pulse,category');
+  assert.equal(en[1], '2026-10-02T08:00:00.000Z,118,76,64,Normal');
+  assert.equal(en[2], '2026-10-01T08:00:00.000Z,150,95,,Hypertension stage 2');
 });
 
 test('makeReading приводит числа и пустой пульс к null', () => {
@@ -65,14 +62,37 @@ test('makeReading приводит числа и пустой пульс к null
   assert.equal(r.takenAt, 1000);
 });
 
-test('дата: пусто — сейчас, полная дата и время, ошибки', async () => {
-  const { parseTakenAt } = await import('../src/bp.mjs');
+test('дата: пусто — сейчас, полная дата и время, ошибки', () => {
   const now = new Date(2026, 9, 10, 12, 0).getTime();
   assert.equal(parseTakenAt('', now).takenAt, now);
   assert.equal(parseTakenAt('  ', now).takenAt, now);
   assert.equal(parseTakenAt('01.10.2026 08:30', now).takenAt, new Date(2026, 9, 1, 8, 30).getTime());
   assert.equal(parseTakenAt('5.3.2026', now).takenAt, new Date(2026, 2, 5, 0, 0).getTime());
-  assert.match(parseTakenAt('31.02.2026', now).error, /не существует/);
-  assert.match(parseTakenAt('11.10.2026', now).error, /будущем/);
-  assert.match(parseTakenAt('вчера', now).error, /дд\.мм/);
+  assert.equal(parseTakenAt('31.02.2026', now).error, 'err_date_invalid');
+  assert.equal(parseTakenAt('11.10.2026', now).error, 'err_date_future');
+  assert.equal(parseTakenAt('вчера', now).error, 'err_date_format');
+});
+
+test('каждый ключ переведён на все языки', () => {
+  const keys = Object.keys(STRINGS.en);
+  for (const lang of LANGUAGES) {
+    for (const key of keys) {
+      assert.ok(STRINGS[lang][key], `нет перевода ${key} для ${lang}`);
+    }
+    assert.deepEqual(Object.keys(STRINGS[lang]).sort(), keys.sort(), `разные ключи в ${lang}`);
+  }
+});
+
+test('подстановка переменных и запасной язык', () => {
+  assert.equal(translate('en', 'chartTitle', { n: 5 }), 'Last 5 readings');
+  assert.equal(translate('ru', 'chartTitle', { n: 5 }), 'Последние 5 измерений');
+  assert.equal(translate('xx', 'save'), 'Save');
+  assert.equal(translate('en', 'unknown_key'), 'unknown_key');
+});
+
+test('язык по умолчанию от системы', () => {
+  assert.equal(detectLanguage('ru-RU'), 'ru');
+  assert.equal(detectLanguage('en-US'), 'en');
+  assert.equal(detectLanguage('de-DE'), 'en');
+  assert.equal(detectLanguage(undefined), 'en');
 });
