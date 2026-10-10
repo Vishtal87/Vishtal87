@@ -84,3 +84,60 @@ export function healthTypeFor(type) {
   if (type === TYPES.weight) return 'Weight';
   return null;
 }
+
+// Чтение для импорта: давление, сахар и вес, которые записали другие приложения или приборы.
+export const READ_PERMISSIONS = Object.freeze([
+  { accessType: 'read', recordType: 'BloodPressure' },
+  { accessType: 'read', recordType: 'BloodGlucose' },
+  { accessType: 'read', recordType: 'Weight' },
+]);
+
+export const ALL_PERMISSIONS = Object.freeze([...WRITE_PERMISSIONS, ...READ_PERMISSIONS]);
+
+const RELATION_TO_CONTEXT = {
+  [HC.relationToMeal.FASTING]: 'fasting',
+  [HC.relationToMeal.BEFORE_MEAL]: 'beforeMeal',
+  [HC.relationToMeal.AFTER_MEAL]: 'afterMeal',
+};
+
+// Запись Health Connect → запись дневника. Возвращает null, если запись не нужна.
+// ownPackage — пакет этого приложения: его собственные записи в импорт не попадают.
+export function fromHealthRecord(hc, { ownPackage } = {}) {
+  const meta = hc.metadata ?? {};
+  if (!meta.id) return null;
+  if (meta.clientRecordId || (ownPackage && meta.dataOrigin === ownPackage)) return null;
+  const takenAt = Date.parse(hc.time);
+  if (Number.isNaN(takenAt)) return null;
+  const sourceId = meta.id;
+
+  if (hc.recordType === 'BloodPressure') {
+    return {
+      sourceId,
+      type: TYPES.bp,
+      takenAt,
+      input: {
+        systolic: Math.round(hc.systolic.inMillimetersOfMercury),
+        diastolic: Math.round(hc.diastolic.inMillimetersOfMercury),
+        pulse: '',
+      },
+    };
+  }
+
+  if (hc.recordType === 'BloodGlucose') {
+    return {
+      sourceId,
+      type: TYPES.glucose,
+      takenAt,
+      input: {
+        value: hc.level.inMillimolesPerLiter,
+        context: RELATION_TO_CONTEXT[hc.relationToMeal] ?? 'other',
+      },
+    };
+  }
+
+  if (hc.recordType === 'Weight') {
+    return { sourceId, type: TYPES.weight, takenAt, input: { value: hc.weight.inKilograms } };
+  }
+
+  return null;
+}

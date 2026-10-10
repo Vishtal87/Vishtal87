@@ -24,7 +24,7 @@
 Данные покидают устройство только по вашему прямому действию:
 
 - **экспорт** в файл (CSV, PDF-отчёт, резервная копия) — файл отправляется тем приложением, которое вы выбрали в системном окне «Поделиться»;
-- **синхронизация с Health Connect** (Android) — по нажатию кнопки записи передаются в Health Connect на вашем устройстве (давление, уровень глюкозы, вес). Приложение только записывает данные в Health Connect и не читает их оттуда.
+- **синхронизация с Health Connect** (Android) — по нажатию кнопки ваши записи передаются в Health Connect на вашем устройстве (давление, уровень глюкозы, вес). Приложение также читает из Health Connect давление, глюкозу и вес, которые записали другие приложения или приборы, и добавляет их в дневник. Чтение и запись происходят только на вашем устройстве; ничего не отправляется разработчику.
 
 Приложение не содержит рекламы, аналитики, сторонних SDK для отслеживания и не передаёт данные третьим лицам.
 
@@ -34,7 +34,7 @@
 
 ## 5. Разрешения
 
-- **Health Connect** (Android, по желанию): запись измерений давления, глюкозы и веса. Включается только при подключении в приложении и отключается в настройках Health Connect.
+- **Health Connect** (Android, по желанию): чтение и запись измерений давления, глюкозы и веса. Включается только при подключении в приложении и отключается в настройках Health Connect.
 - **Общий доступ к файлам**: нужен только для отправки экспортированного файла через системное окно.
 - **Уведомления**: напоминания о приёме лекарств. Они создаются на телефоне по расписанию, который задали вы. На сервер ничего не отправляется.
 - **Выбор файла**: для восстановления резервной копии приложение открывает системный выбор файла. Читается только выбранный вами файл.
@@ -67,13 +67,13 @@
 
 **Sharing.** Data leaves the device only when you choose to:
 - export a file (CSV, PDF report, backup) and send it through the system share sheet;
-- sync measurements to Health Connect on Android. The app only writes to Health Connect and does not read from it.
+- sync measurements with Health Connect on Android: your entries are written there, and blood pressure, glucose and weight recorded by other apps or devices are read into the diary. Everything stays on the device.
 
 The app has no ads, no analytics, no tracking SDKs and does not share data with third parties.
 
 **Purchases.** Pro subscriptions are processed by the App Store or RuStore. The developer does not receive payment details.
 
-**Permissions.** Health Connect (optional, write-only), notifications (local medicine reminders, scheduled on the device only) and the system share and file picker. The app does not request contacts, camera, location or microphone access.
+**Permissions.** Health Connect (optional; read and write of blood pressure, glucose and weight), notifications (local medicine reminders, scheduled on the device only) and the system share and file picker. The app does not request contacts, camera, location or microphone access.
 
 **Retention and deletion.** Data stays on the device until you delete it in the app or uninstall the app. Records written to Health Connect are managed in Health Connect.
 

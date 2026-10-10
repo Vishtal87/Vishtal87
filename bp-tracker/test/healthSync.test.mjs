@@ -47,3 +47,43 @@ test('разрешения: только запись трёх типов', () =
   assert.equal(WRITE_PERMISSIONS.length, 3);
   assert.ok(WRITE_PERMISSIONS.every((p) => p.accessType === 'write'));
 });
+
+import { fromHealthRecord, ALL_PERMISSIONS, READ_PERMISSIONS } from '../src/healthSync.mjs';
+
+test('импорт: давление, сахар и вес из чужих записей Health Connect', () => {
+  const bp = fromHealthRecord({
+    recordType: 'BloodPressure',
+    time: '2026-10-01T08:30:00.000Z',
+    systolic: { inMillimetersOfMercury: 121.4 },
+    diastolic: { inMillimetersOfMercury: 79 },
+    metadata: { id: 'hc-1', dataOrigin: 'com.omron.connect' },
+  }, { ownPackage: 'ru.test.app' });
+  assert.deepEqual(bp, { sourceId: 'hc-1', type: 'bp', takenAt: Date.parse('2026-10-01T08:30:00.000Z'), input: { systolic: 121, diastolic: 79, pulse: '' } });
+
+  const glucose = fromHealthRecord({
+    recordType: 'BloodGlucose',
+    time: '2026-10-01T07:00:00.000Z',
+    level: { inMillimolesPerLiter: 5.6 },
+    relationToMeal: 2,
+    metadata: { id: 'hc-2', dataOrigin: 'com.other' },
+  });
+  assert.equal(glucose.input.context, 'fasting');
+  assert.equal(glucose.input.value, 5.6);
+
+  const weight = fromHealthRecord({ recordType: 'Weight', time: '2026-10-01T06:00:00.000Z', weight: { inKilograms: 81.2 }, metadata: { id: 'hc-3', dataOrigin: 'com.scale' } });
+  assert.deepEqual(weight.input, { value: 81.2 });
+});
+
+test('импорт: свои записи и записи без id пропускаются', () => {
+  const own = { recordType: 'Weight', time: '2026-10-01T06:00:00.000Z', weight: { inKilograms: 80 }, metadata: { id: 'x', dataOrigin: 'ru.test.app' } };
+  assert.equal(fromHealthRecord(own, { ownPackage: 'ru.test.app' }), null);
+  const withClientId = { ...own, metadata: { id: 'y', clientRecordId: 'diary-1', dataOrigin: 'other' } };
+  assert.equal(fromHealthRecord(withClientId), null);
+  assert.equal(fromHealthRecord({ ...own, metadata: {} }), null);
+  assert.equal(fromHealthRecord({ ...own, recordType: 'Steps', metadata: { id: 'z' } }), null);
+});
+
+test('разрешения: запрос включает чтение и запись', () => {
+  assert.equal(READ_PERMISSIONS.every((p) => p.accessType === 'read'), true);
+  assert.equal(ALL_PERMISSIONS.length, 6);
+});

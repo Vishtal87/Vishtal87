@@ -41,7 +41,7 @@ import { PRO_FEATURES, isUnlocked } from './src/entitlements.mjs';
 import { INTAKE_STATUS, toggleIntake, statusFor, dateKey } from './src/intake.mjs';
 import { buildBackup, parseBackup } from './src/backup.mjs';
 import { buildReportHtml } from './src/report.mjs';
-import { toHealthRecord, pendingRecords, healthTypeFor, WRITE_PERMISSIONS } from './src/healthSync.mjs';
+import { toHealthRecord, pendingRecords, healthTypeFor, fromHealthRecord, ALL_PERMISSIONS, READ_PERMISSIONS } from './src/healthSync.mjs';
 import { canAddReminder, reminderSlots } from './src/reminders.mjs';
 import { chartPoints, scaleRange } from './src/chart.mjs';
 import { PRIVACY_URL, TERMS_URL } from './src/links.mjs';
@@ -56,6 +56,7 @@ const MEDS_KEY = 'meds-v1';
 const PRO_KEY = 'pro-v1';
 const INTAKE_KEY = 'intake-v1';
 const HC_SYNCED_KEY = 'hc-synced-v1';
+const HC_IMPORT_KEY = 'hc-imported-v1';
 const REMINDER_CHANNEL = 'medicine';
 const DAY = 24 * 60 * 60 * 1000;
 const CHART_POINTS = 30;
@@ -225,7 +226,7 @@ export default function App() {
     try {
       const ok = await HealthConnect.initialize();
       if (!ok) return Alert.alert(tr('hcTitle'), tr('hcUnavailable'));
-      const granted = await HealthConnect.requestPermission(WRITE_PERMISSIONS);
+      const granted = await HealthConnect.requestPermission(ALL_PERMISSIONS);
       if (!granted || granted.length === 0) return Alert.alert(tr('hcTitle'), tr('hcDenied'));
       setHcReady(true);
       await hcSync();
@@ -234,9 +235,9 @@ export default function App() {
     }
   }
 
+  // Синхронизация в обе стороны: сначала отправляем свои записи, потом забираем чужие из «Здоровья».
   async function hcSync() {
     const todo = pendingRecords(records, hcSynced);
-    if (todo.length === 0) return Alert.alert(tr('hcTitle'), tr('hcDone', { n: 0 }));
     const sent = [];
     try {
       for (let i = 0; i < todo.length; i += 100) {
@@ -247,7 +248,53 @@ export default function App() {
     } finally {
       if (sent.length) setHcSynced((prev) => [...prev, ...sent]);
     }
-    Alert.alert(tr('hcTitle'), tr('hcDone', { n: sent.length }));
+    let imported = 0;
+    let importError = null;
+    try {
+      imported = await hcImport();
+    } catch (e) {
+      importError = String(e.message ?? e);
+    }
+    const lines = [tr('hcDone', { n: sent.length })];
+    lines.push(importError ? tr('hcImportFailed') : tr('hcImported', { n: imported }));
+    Alert.alert(tr('hcTitle'), lines.join('\n'));
+  }
+
+  // Забираем давление, сахар и вес, которые записали другие приложения или приборы.
+  // Свои записи пропускаем (у них есть clientRecordId), уже импортированные помним по id.
+  async function hcImport() {
+    const granted = await HealthConnect.getGrantedPermissions();
+    if (!granted.some((p) => p.accessType === 'read')) {
+      await HealthConnect.requestPermission(READ_PERMISSIONS);
+    }
+    const raw = await AsyncStorage.getItem(HC_IMPORT_KEY).catch(() => null);
+    const state = raw ? JSON.parse(raw) : { done: false, seen: [] };
+    const seen = new Set(state.seen);
+    // Первый импорт берёт 90 дней, дальше — последние 7: поздно синхронизированные измерения тоже попадут.
+    const since = new Date(Date.now() - (state.done ? 7 : 90) * DAY).toISOString();
+    const fresh = [];
+    for (const recordType of ['BloodPressure', 'BloodGlucose', 'Weight']) {
+      let pageToken;
+      do {
+        const res = await HealthConnect.readRecords(recordType, {
+          timeRangeFilter: { operator: 'after', startTime: since },
+          pageSize: 1000,
+          pageToken,
+        });
+        for (const r of res.records) {
+          const rec = fromHealthRecord({ ...r, recordType });
+          if (!rec || seen.has(rec.sourceId)) continue;
+          seen.add(rec.sourceId);
+          const check = validateMeasurement(rec.type, rec.input, { glucose: 'mmol', weight: 'kg' });
+          if (check.error) continue;
+          fresh.push({ ...makeRecord(rec.type, check.values, rec.takenAt), source: 'health' });
+        }
+        pageToken = res.pageToken;
+      } while (pageToken);
+    }
+    await AsyncStorage.setItem(HC_IMPORT_KEY, JSON.stringify({ done: true, seen: [...seen] })).catch(() => {});
+    if (fresh.length) setRecords((prev) => [...fresh, ...prev]);
+    return fresh.length;
   }
 
   // Сохраняем статус Pro на телефоне: без сети приложение покажет последнее известное состояние.
@@ -661,7 +708,7 @@ export default function App() {
                           {r.type === TYPES.bp && r.values.pulse ? <Text style={[styles.muted, { color: t.muted }]}>  · {tr('pulseShort', { v: r.values.pulse })}</Text> : null}
                         </Text>
                         <Text style={[styles.itemDate, { color: t.muted }]}>
-                          {typeLabel(r.type)} · {formatDate(r.takenAt)}
+                          {typeLabel(r.type)} · {formatDate(r.takenAt)}{r.source === 'health' ? ` · ${tr('fromHealth')}` : ''}
                         </Text>
                         {cat ? <Text style={[styles.badge, { color }]}>{catLabel(cat)}</Text> : null}
                         {r.type === TYPES.glucose ? <Text style={[styles.muted, { color: t.muted, fontSize: 12 }]}>{tr(`ctx_${r.values.context}`)}</Text> : null}
