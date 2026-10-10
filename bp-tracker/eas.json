@@ -9,10 +9,18 @@
     },
     "production": {
       "autoIncrement": true,
-      "android": { "buildType": "app-bundle" }
+      "android": { "buildType": "app-bundle" },
+      "ios": {}
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "android": {
+        "track": "internal",
+        "releaseStatus": "draft",
+        "serviceAccountKeyPath": "./secrets/play-service-account.json"
+      },
+      "ios": {}
+    }
   }
 }

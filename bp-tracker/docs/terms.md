@@ -50,7 +50,7 @@
 
 ## 10. Применимое право
 
-Применяется право [ЮРИСДИКЦИЯ / JURISDICTION].
+Применяется право Российской Федерации.
 
 ---
 
@@ -70,4 +70,4 @@
 
 **Liability.** The app is provided "as is". To the extent permitted by law, the developer is not liable for health decisions based on your records or for losses caused by input errors, device loss or measuring device faults.
 
-**Changes and governing law.** Terms may change; updates are published at the app's terms URL with a new date. Governed by the laws of [JURISDICTION].
+**Changes and governing law.** Terms may change; updates are published at the app's terms URL with a new date. Governed by the laws of the Russian Federation.

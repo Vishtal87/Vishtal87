@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  Linking,
   ScrollView,
   StyleSheet,
   Text,
@@ -20,6 +21,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { File, Paths } from 'expo-file-system';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import { useIAP, isUserCancelledError } from 'expo-iap';
 import { classify, parseTakenAt, formatTakenAt } from './src/bp.mjs';
 import {
   TYPES,
@@ -42,6 +44,8 @@ import { buildReportHtml } from './src/report.mjs';
 import { toHealthRecord, pendingRecords, healthTypeFor, WRITE_PERMISSIONS } from './src/healthSync.mjs';
 import { canAddReminder, reminderSlots } from './src/reminders.mjs';
 import { chartPoints, scaleRange } from './src/chart.mjs';
+import { PRIVACY_URL, TERMS_URL } from './src/links.mjs';
+import { PRO_PLANS, PRO_SKUS, sortPlans, buildSubscriptionRequest, hasProPurchase } from './src/purchases.mjs';
 import { translate, localeTag, detectLanguage, LANGUAGES } from './src/i18n.mjs';
 
 const RECORDS_KEY = 'health-records-v2';
@@ -119,6 +123,21 @@ export default function App() {
   const [medError, setMedError] = useState(null);
   const [editingMedId, setEditingMedId] = useState(null);
   const [isPro, setIsPro] = useState(false);
+  // Покупки магазина. Результат покупки приходит в обработчики, а не в возвращаемое значение.
+  const iap = useIAP({
+    onPurchaseSuccess: async (purchase) => {
+      try {
+        await iap.finishTransaction({ purchase, isConsumable: false });
+      } catch (e) {
+        // Транзакция останется в очереди магазина и закроется при следующем запуске.
+      }
+      applyPro(true);
+      Alert.alert(tr('subscribeTitle'), tr('purchaseDone'));
+    },
+    onPurchaseError: (e) => {
+      if (!isUserCancelledError(e)) Alert.alert(tr('subscribeTitle'), tr('purchaseFailed'));
+    },
+  });
   const [intake, setIntakeList] = useState([]);
   const [reportDays, setReportDays] = useState(30);
   const [hcSynced, setHcSynced] = useState([]);
@@ -231,10 +250,65 @@ export default function App() {
     Alert.alert(tr('hcTitle'), tr('hcDone', { n: sent.length }));
   }
 
+  // Сохраняем статус Pro на телефоне: без сети приложение покажет последнее известное состояние.
+  function applyPro(value) {
+    setIsPro(value);
+    AsyncStorage.setItem(PRO_KEY, String(value)).catch(() => {});
+  }
+
+  // Статус подписки из магазина. Сеть недоступна — оставляем сохранённое значение.
+  async function refreshStoreEntitlement() {
+    try {
+      const active = await iap.hasActiveSubscriptions(PRO_SKUS);
+      if (active) applyPro(true);
+      else if (!TEST_PRO_BUILD && !SHOW_TEST_PRO) applyPro(false);
+    } catch (e) {
+      // Оставляем сохранённый статус.
+    }
+  }
+
+  // Загружаем тарифы и проверяем подписку, когда магазин подключился.
+  useEffect(() => {
+    if (!iap.connected) return;
+    iap.fetchProducts({ skus: PRO_SKUS, type: 'subs' }).catch(() => {});
+    refreshStoreEntitlement();
+  }, [iap.connected]);
+
+  function openPaywall() {
+    const plans = sortPlans(iap.subscriptions);
+    if (plans.length === 0) return Alert.alert(tr('subscribeTitle'), tr('subscribeNotReady'));
+    const buttons = plans.map((product) => ({
+      text: `${tr(product.id === PRO_PLANS.yearly ? 'planYearly' : 'planMonthly')} — ${product.displayPrice}`,
+      onPress: () => buyPlan(product),
+    }));
+    buttons.push({ text: tr('cancel'), style: 'cancel' });
+    Alert.alert(tr('subscribeTitle'), `${tr('subscribeIncludes')}\n\n${tr('subscribeTerms')}`, buttons);
+  }
+
+  async function buyPlan(product) {
+    const request = buildSubscriptionRequest(product, Platform.OS);
+    if (!request) return Alert.alert(tr('subscribeTitle'), tr('subscribeNotReady'));
+    try {
+      await iap.requestPurchase(request);
+    } catch (e) {
+      if (!isUserCancelledError(e)) Alert.alert(tr('subscribeTitle'), tr('purchaseFailed'));
+    }
+  }
+
+  async function restorePurchase() {
+    try {
+      await iap.restorePurchases();
+      const active = await iap.hasActiveSubscriptions(PRO_SKUS);
+      applyPro(active || hasProPurchase(iap.availablePurchases));
+      Alert.alert(tr('restorePurchases'), tr(active ? 'restoreDone' : 'restoreNone'));
+    } catch (e) {
+      Alert.alert(tr('restorePurchases'), tr('purchaseFailed'));
+    }
+  }
+
   function toggleTestPro() {
     const next = !isPro;
-    setIsPro(next);
-    AsyncStorage.setItem(PRO_KEY, String(next)).catch(() => {});
+    applyPro(next);
   }
 
   // Функция доступна с Pro. Без Pro показываем заглушку и кнопку теста.
@@ -243,10 +317,10 @@ export default function App() {
     // Без подписки — экран с условиями. В релизной сборке тестового входа нет.
     const buttons = [
       { text: tr('cancel'), style: 'cancel' },
-      { text: tr('subscribeButton'), onPress: () => Alert.alert(tr('subscribeTitle'), tr('subscribeNotReady')) },
+      { text: tr('subscribeButton'), onPress: () => openPaywall() },
     ];
     if (SHOW_TEST_PRO) buttons.push({ text: tr('proTestUnlock'), onPress: () => toggleTestPro() });
-    Alert.alert(tr('subscribeTitle'), `${tr('subscribeIncludes')}\n\n${tr('subscribePrice')}\n\n${tr('subscribeTerms')}`, buttons);
+    Alert.alert(tr('subscribeTitle'), `${tr('subscribeIncludes')}\n\n${tr('subscribeTerms')}`, buttons);
   }
 
   function markIntake(medId, time, status) {
@@ -644,10 +718,18 @@ export default function App() {
               <Text style={[styles.h2, { color: t.text }]}>{tr('subscribeTitle')}</Text>
               <Text style={[styles.muted, { color: t.muted }]}>{tr('subscribeIncludes')}</Text>
               <Text style={[styles.muted, { color: t.muted, fontSize: 12 }]}>{tr('subscribeTerms')}</Text>
-              <TouchableOpacity style={[styles.button, { backgroundColor: t.accent }]} onPress={() => Alert.alert(tr('subscribeTitle'), tr('subscribeNotReady'))} accessibilityRole="button">
+              <View style={styles.linkRow}>
+                <TouchableOpacity onPress={() => Linking.openURL(PRIVACY_URL)} accessibilityRole="link">
+                  <Text style={[styles.linkText, { color: t.text }]}>{tr('privacyLink')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => Linking.openURL(TERMS_URL)} accessibilityRole="link">
+                  <Text style={[styles.linkText, { color: t.text }]}>{tr('termsLink')}</Text>
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity style={[styles.button, { backgroundColor: t.accent }]} onPress={openPaywall} accessibilityRole="button">
                 <Text style={styles.buttonText}>{tr('subscribeButton')}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.button, { backgroundColor: t.muted }]} onPress={() => Alert.alert(tr('restorePurchases'), tr('subscribeNotReady'))} accessibilityRole="button">
+              <TouchableOpacity style={[styles.button, { backgroundColor: t.muted }]} onPress={restorePurchase} accessibilityRole="button">
                 <Text style={styles.buttonText}>{tr('restorePurchases')}</Text>
               </TouchableOpacity>
               {SHOW_TEST_PRO ? (
@@ -707,29 +789,29 @@ export default function App() {
                 m.times.map((time) => {
                   const status = statusFor(intake, m.id, dateKey(Date.now()), time);
                   return (
-                    <View key={`${m.id}-${time}`} style={[styles.item, { borderTopColor: t.border }]}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.itemMain, { color: t.text }]}>{m.name} · {time}</Text>
-                        <Text style={[styles.muted, { color: t.muted, fontSize: 12 }]}>
-                          {status === 'taken' ? tr('intakeTaken') : status === 'missed' ? tr('intakeMissed') : tr('intakeNone')}
-                        </Text>
+                    <View key={`${m.id}-${time}`} style={[styles.intakeRow, { borderTopColor: t.border }]}>
+                      <Text style={[styles.itemMain, { color: t.text }]}>{m.name} · {time}</Text>
+                      <Text style={[styles.muted, { color: t.muted, fontSize: 12 }]}>
+                        {status === 'taken' ? tr('intakeTaken') : status === 'missed' ? tr('intakeMissed') : tr('intakeNone')}
+                      </Text>
+                      <View style={styles.intakeButtons}>
+                        <TouchableOpacity
+                          style={[styles.intakeBtn, { borderColor: t.border, backgroundColor: status === 'taken' ? '#22c55e' : t.card }]}
+                          onPress={() => markIntake(m.id, time, INTAKE_STATUS.TAKEN)}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: status === 'taken' }}
+                        >
+                          <Text style={[styles.chipText, { color: status === 'taken' ? '#fff' : t.text }]}>{tr('intakeTaken')}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.intakeBtn, { borderColor: t.border, backgroundColor: status === 'missed' ? '#ef4444' : t.card }]}
+                          onPress={() => markIntake(m.id, time, INTAKE_STATUS.MISSED)}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: status === 'missed' }}
+                        >
+                          <Text style={[styles.chipText, { color: status === 'missed' ? '#fff' : t.text }]}>{tr('intakeMissed')}</Text>
+                        </TouchableOpacity>
                       </View>
-                      <TouchableOpacity
-                        style={[styles.chip, { borderColor: t.border, backgroundColor: status === 'taken' ? '#22c55e' : t.card }]}
-                        onPress={() => markIntake(m.id, time, INTAKE_STATUS.TAKEN)}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: status === 'taken' }}
-                      >
-                        <Text style={[styles.chipText, { color: status === 'taken' ? '#fff' : t.text }]}>{tr('intakeTaken')}</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.chip, { borderColor: t.border, backgroundColor: status === 'missed' ? '#ef4444' : t.card }]}
-                        onPress={() => markIntake(m.id, time, INTAKE_STATUS.MISSED)}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: status === 'missed' }}
-                      >
-                        <Text style={[styles.chipText, { color: status === 'missed' ? '#fff' : t.text }]}>{tr('intakeMissed')}</Text>
-                      </TouchableOpacity>
                     </View>
                   );
                 }),
@@ -1051,6 +1133,11 @@ const styles = StyleSheet.create({
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   legendText: { fontSize: 11 },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  linkRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
+  intakeRow: { gap: 6, borderTopWidth: 2, paddingVertical: 12 },
+  intakeButtons: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  intakeBtn: { flex: 1, alignItems: 'center', borderWidth: LINE, borderRadius: 0, paddingVertical: 10 },
+  linkText: { fontSize: 14, fontWeight: '700', textDecorationLine: 'underline' },
   proBadge: { backgroundColor: '#B388FF', borderRadius: 0, borderWidth: 2, borderColor: '#000', paddingVertical: 2, paddingHorizontal: 8 },
   proBadgeText: { color: '#000', fontSize: 11, fontWeight: '900' },
   tabBar: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', borderTopWidth: LINE, paddingBottom: 20, paddingTop: 8 },

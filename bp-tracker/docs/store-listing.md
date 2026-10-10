@@ -1,6 +1,6 @@
 # Карточка приложения и анкеты магазинов / Store listing and forms
 
-Черновик. Значения в [скобках] заполняет разработчик.
+Черновик. Заполните оставшиеся поля в квадратных скобках до отправки.
 
 ## Блокеры до отправки на проверку
 
@@ -40,7 +40,7 @@
 Приложение не ставит диагнозов и не даёт рекомендаций. Оно не заменяет врача.
 
 Подписка Pro: [ЦЕНА и ПЕРИОД]. Оплата списывается с аккаунта App Store или Google Play. Подписка продлевается автоматически, отменить можно в настройках магазина.
-Политика конфиденциальности: [URL]. Условия: [URL].
+Политика конфиденциальности: https://vishtal87.github.io/Vishtal87/bp-tracker/site/privacy.html. Условия: https://vishtal87.github.io/Vishtal87/bp-tracker/site/terms.html.
 
 ## Description (EN)
 
@@ -65,7 +65,7 @@ Your data stays on your phone. No sign-up, no ads.
 Health Diary is not a medical device. It does not diagnose or recommend treatment and does not replace your doctor.
 
 Pro subscription: [PRICE and PERIOD]. Payment is charged to your App Store or Google Play account. The subscription renews automatically; cancel in store settings.
-Privacy policy: [URL]. Terms: [URL].
+Privacy policy: https://vishtal87.github.io/Vishtal87/bp-tracker/site/privacy.html. Terms: https://vishtal87.github.io/Vishtal87/bp-tracker/site/terms.html.
 
 ## Категория и возрастной рейтинг
 

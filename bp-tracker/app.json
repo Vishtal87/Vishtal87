@@ -8,7 +8,11 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.example.bptracker"
+      "bundleIdentifier": "com.example.bptracker",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "buildNumber": "1"
     },
     "android": {
       "adaptiveIcon": {
@@ -17,7 +21,18 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "package": "com.example.bptracker"
+      "package": "com.example.bptracker",
+      "versionCode": 1,
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_APP_BADGE",
+        "com.anddoes.launcher.permission.UPDATE_COUNT",
+        "com.htc.launcher.permission.READ_SETTINGS",
+        "com.htc.launcher.permission.UPDATE_SHORTCUT",
+        "com.huawei.android.launcher.permission.CHANGE_BADGE"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -35,7 +50,8 @@
             "minSdkVersion": 26
           }
         }
-      ]
+      ],
+      "expo-iap"
     ]
   }
 }

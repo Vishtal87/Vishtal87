@@ -105,3 +105,32 @@ test('лекарство: время необязательно, но если �
   assert.equal(validateMed({ name: 'A', times: '25:00' }).error, 'err_med_times');
   assert.equal(validateMed({ name: '  ', times: '' }).error, 'err_med_name');
 });
+
+import { PRO_PLANS, PRO_SKUS, sortPlans, buildSubscriptionRequest, hasProPurchase } from '../src/purchases.mjs';
+
+test('подписки: порядок тарифов и запрос покупки для iOS и Android', () => {
+  const products = [{ id: PRO_PLANS.yearly }, { id: 'other' }, { id: PRO_PLANS.monthly }];
+  assert.deepEqual(sortPlans(products).map((p) => p.id), [PRO_PLANS.monthly, PRO_PLANS.yearly]);
+  assert.deepEqual(buildSubscriptionRequest({ id: PRO_PLANS.monthly }, 'ios'), {
+    type: 'subs',
+    request: { apple: { sku: PRO_PLANS.monthly } },
+  });
+  const android = buildSubscriptionRequest({ id: PRO_PLANS.yearly, subscriptionOffers: [{ sku: PRO_PLANS.yearly, offerToken: 'tok' }] }, 'android');
+  assert.deepEqual(android.request.google.subscriptionOffers, [{ sku: PRO_PLANS.yearly, offerToken: 'tok' }]);
+  assert.equal(buildSubscriptionRequest({ id: PRO_PLANS.yearly, subscriptionOffers: [] }, 'android'), null);
+  assert.equal(buildSubscriptionRequest(undefined, 'ios'), null);
+});
+
+test('подписки: активная покупка Pro распознаётся', () => {
+  assert.equal(hasProPurchase([{ productId: PRO_SKUS[0] }]), true);
+  assert.equal(hasProPurchase([{ productId: 'unknown' }]), false);
+  assert.equal(hasProPurchase([]), false);
+  assert.equal(hasProPurchase(null), false);
+});
+
+import { PRIVACY_URL, TERMS_URL } from '../src/links.mjs';
+
+test('ссылки на документы указывают на https', () => {
+  assert.match(PRIVACY_URL, /^https:\/\//);
+  assert.match(TERMS_URL, /^https:\/\//);
+});
