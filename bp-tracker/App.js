@@ -40,6 +40,7 @@ import { validateMed, makeMed } from './src/meds.mjs';
 import { PRO_FEATURES, isUnlocked } from './src/entitlements.mjs';
 import { INTAKE_STATUS, toggleIntake, statusFor, dateKey } from './src/intake.mjs';
 import { buildBackup, parseBackup } from './src/backup.mjs';
+import { restoreFromBackup, undoRestore, hasUndo, STORAGE } from './src/restore.mjs';
 import { buildReportHtml } from './src/report.mjs';
 import { toHealthRecord, pendingRecords, healthTypeFor, fromHealthRecord, ALL_PERMISSIONS, READ_PERMISSIONS } from './src/healthSync.mjs';
 import { canAddReminder, reminderSlots } from './src/reminders.mjs';
@@ -51,13 +52,13 @@ import { PRIVACY_URL, TERMS_URL } from './src/links.mjs';
 import { PRO_PLANS, PRO_SKUS, sortPlans, buildSubscriptionRequest, hasProPurchase } from './src/purchases.mjs';
 import { translate, localeTag, detectLanguage, LANGUAGES } from './src/i18n.mjs';
 
-const RECORDS_KEY = 'health-records-v2';
+const RECORDS_KEY = STORAGE.records;
 const OLD_BP_KEY = 'bp-readings-v1';
 const LANG_KEY = 'bp-lang-v1';
-const UNITS_KEY = 'health-units-v1';
-const MEDS_KEY = 'meds-v1';
+const UNITS_KEY = STORAGE.units;
+const MEDS_KEY = STORAGE.meds;
 const PRO_KEY = 'pro-v1';
-const INTAKE_KEY = 'intake-v1';
+const INTAKE_KEY = STORAGE.intake;
 const HC_SYNCED_KEY = 'hc-synced-v1';
 const HC_IMPORT_KEY = 'hc-imported-v1';
 const REMINDER_CHANNEL = 'medicine';
@@ -148,9 +149,15 @@ export default function App() {
   const [reportDays, setReportDays] = useState(30);
   const [hcSynced, setHcSynced] = useState([]);
   const [hcReady, setHcReady] = useState(false);
+  const [canUndo, setCanUndo] = useState(false);
   const [devices, setDevices] = useState([]);
   const [deviceStatus, setDeviceStatus] = useState(null);
   const stopListeningRef = useRef(null);
+
+  // Есть ли снимок для отмены восстановления (сохраняется между запусками).
+  useEffect(() => {
+    refreshCanUndo();
+  }, []);
 
   // При уходе с экрана отключаем прибор, если к нему подключены.
   useEffect(() => () => {
@@ -497,33 +504,55 @@ export default function App() {
     }
   }
 
+  // Сначала проверяем файл и показываем, сколько записей в нём. Данные меняются только после подтверждения.
   async function pickBackup() {
+    let text;
     try {
       const res = await DocumentPicker.getDocumentAsync({
         type: ['application/json', 'text/plain', 'application/octet-stream'],
         copyToCacheDirectory: true,
       });
       if (res.canceled) return;
-      const text = await new File(res.assets[0].uri).text();
-      const check = parseBackup(text);
-      if (check.error) return Alert.alert(tr('backupTitle'), tr(check.error));
-      Alert.alert(tr('backupTitle'), tr('backupReplaceWarn'), [
-        { text: tr('cancel'), style: 'cancel' },
-        {
-          text: tr('backupRestore'),
-          style: 'destructive',
-          onPress: () => {
-            setRecords(check.data.records);
-            setMeds(check.data.meds);
-            setIntakeList(check.data.intake);
-            if (check.data.units && check.data.units.glucose) changeUnits(check.data.units);
-            Alert.alert(tr('backupTitle'), tr('backupDone'));
-          },
-        },
-      ]);
+      text = await new File(res.assets[0].uri).text();
     } catch (e) {
-      Alert.alert(tr('backupTitle'), tr('backupBadFile'));
+      return Alert.alert(tr('backupTitle'), tr('backupBadFile'));
     }
+    const check = parseBackup(text);
+    if (check.error) return Alert.alert(tr('backupTitle'), tr(check.error));
+    const current = { records, meds, intake, units };
+    Alert.alert(tr('backupTitle'), tr('backupConfirm', { n: check.counts.records, m: records.length }), [
+      { text: tr('cancel'), style: 'cancel' },
+      {
+        text: tr('backupRestore'),
+        style: 'destructive',
+        onPress: async () => {
+          const res = await restoreFromBackup(AsyncStorage, text, current, Date.now());
+          if (!res.ok) return Alert.alert(tr('backupTitle'), tr(res.error));
+          setRecords(res.data.records);
+          setMeds(res.data.meds);
+          setIntakeList(res.data.intake);
+          setUnits({ ...units, ...res.data.units });
+          refreshCanUndo();
+          Alert.alert(tr('backupTitle'), tr('backupDone'));
+        },
+      },
+    ]);
+  }
+
+  // Кнопка показывает то, что реально лежит в хранилище: после перезапуска, успешной и неудачной отмены.
+  function refreshCanUndo() {
+    hasUndo(AsyncStorage).then(setCanUndo).catch(() => setCanUndo(false));
+  }
+
+  async function undoLastRestore() {
+    const res = await undoRestore(AsyncStorage, Date.now());
+    refreshCanUndo();
+    if (!res.ok) return Alert.alert(tr('backupTitle'), tr(res.error));
+    setRecords(res.data.records);
+    setMeds(res.data.meds);
+    setIntakeList(res.data.intake);
+    setUnits({ ...units, ...res.data.units });
+    Alert.alert(tr('backupTitle'), tr('backupUndone'));
   }
 
   function switchLanguage(next) {
@@ -830,6 +859,12 @@ export default function App() {
                 <Ionicons name="cloud-upload-outline" size={20} color="#fff" />
                 <Text style={styles.buttonText}>{tr('backupPick')}</Text>
               </TouchableOpacity>
+              {canUndo ? (
+                <TouchableOpacity style={[styles.button, { backgroundColor: '#E4E4E7' }]} onPress={() => gated(PRO_FEATURES.backup, undoLastRestore)} accessibilityRole="button">
+                  <Ionicons name="arrow-undo-outline" size={20} color="#000" />
+                  <Text style={styles.buttonText}>{tr('backupUndo')}</Text>
+                </TouchableOpacity>
+              ) : null}
             </Card>
             {Platform.OS === 'android' ? (
               <Card t={t}>
