@@ -14,6 +14,8 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 import { classify, parseTakenAt } from './src/bp.mjs';
 import {
   TYPES,
@@ -28,6 +30,10 @@ import {
   toCsvRecords,
 } from './src/measurements.mjs';
 import { validateMed, makeMed } from './src/meds.mjs';
+import { PRO_FEATURES, isUnlocked } from './src/entitlements.mjs';
+import { INTAKE_STATUS, setIntake, statusFor, dateKey } from './src/intake.mjs';
+import { buildBackup, parseBackup } from './src/backup.mjs';
+import { buildReportHtml } from './src/report.mjs';
 import { translate, localeTag, detectLanguage, LANGUAGES } from './src/i18n.mjs';
 
 const RECORDS_KEY = 'health-records-v2';
@@ -35,6 +41,9 @@ const OLD_BP_KEY = 'bp-readings-v1';
 const LANG_KEY = 'bp-lang-v1';
 const UNITS_KEY = 'health-units-v1';
 const MEDS_KEY = 'meds-v1';
+const PRO_KEY = 'pro-v1';
+const INTAKE_KEY = 'intake-v1';
+const DAY = 24 * 60 * 60 * 1000;
 const CHART_POINTS = 30;
 const CHART_MIN = 40;
 const CHART_MAX = 200;
@@ -84,6 +93,10 @@ export default function App() {
   const [medName, setMedName] = useState('');
   const [medTimes, setMedTimes] = useState('');
   const [medError, setMedError] = useState(null);
+  const [isPro, setIsPro] = useState(false);
+  const [intake, setIntakeList] = useState([]);
+  const [reportDays, setReportDays] = useState(30);
+  const [restoreText, setRestoreText] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -112,6 +125,82 @@ export default function App() {
     if (!loaded) return;
     AsyncStorage.setItem(MEDS_KEY, JSON.stringify(meds)).catch(() => {});
   }, [meds, loaded]);
+
+  useEffect(() => {
+    AsyncStorage.multiGet([PRO_KEY, INTAKE_KEY]).then((pairs) => {
+      const [pro, intakeRaw] = pairs.map((p) => p[1]);
+      if (pro) setIsPro(pro === 'true');
+      if (intakeRaw) setIntakeList(JSON.parse(intakeRaw));
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    AsyncStorage.setItem(INTAKE_KEY, JSON.stringify(intake)).catch(() => {});
+  }, [intake]);
+
+  function toggleTestPro() {
+    const next = !isPro;
+    setIsPro(next);
+    AsyncStorage.setItem(PRO_KEY, String(next)).catch(() => {});
+  }
+
+  // Функция доступна с Pro. Без Pro показываем заглушку и кнопку теста.
+  function gated(feature, action) {
+    if (isUnlocked(feature, isPro)) return action();
+    Alert.alert('Pro', tr('proSoon'), [
+      { text: tr('cancel'), style: 'cancel' },
+      { text: tr('proTestUnlock'), onPress: () => { toggleTestPro(); } },
+    ]);
+  }
+
+  function markIntake(medId, time, status) {
+    setIntakeList((prev) => setIntake(prev, { medId, date: dateKey(Date.now()), time, status }));
+  }
+
+  async function makeReport() {
+    const now = Date.now();
+    const html = buildReportHtml({
+      records,
+      meds,
+      intake,
+      units,
+      lang,
+      fromMs: now - reportDays * DAY,
+      toMs: now,
+      dateFmt: (ms) => new Date(ms).toLocaleDateString(localeTag(lang)),
+    });
+    try {
+      const { uri } = await Print.printToFileAsync({ html });
+      await Sharing.shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf' });
+    } catch (e) {
+      Alert.alert(tr('reportMake'), String(e.message ?? e));
+    }
+  }
+
+  function exportBackup() {
+    const text = buildBackup({ records, meds, intake, units });
+    Share.share({ title: tr('backupTitle'), message: text });
+  }
+
+  function restoreBackup() {
+    const check = parseBackup(restoreText);
+    if (check.error) return Alert.alert(tr('backupTitle'), tr(check.error));
+    Alert.alert(tr('backupTitle'), tr('backupReplaceWarn'), [
+      { text: tr('cancel'), style: 'cancel' },
+      {
+        text: tr('backupRestore'),
+        style: 'destructive',
+        onPress: () => {
+          setRecords(check.data.records);
+          setMeds(check.data.meds);
+          setIntakeList(check.data.intake);
+          if (check.data.units && check.data.units.glucose) changeUnits(check.data.units);
+          setRestoreText('');
+          Alert.alert(tr('backupTitle'), tr('backupDone'));
+        },
+      },
+    ]);
+  }
 
   function switchLanguage(next) {
     setLang(next);
@@ -300,12 +389,64 @@ export default function App() {
                 <Text style={styles.buttonText}>{tr('share')}</Text>
               </TouchableOpacity>
             </Card>
+            <Card t={t}>
+              <View style={styles.titleRow}>
+                <Text style={[styles.h2, { color: t.text }]}>{tr('backupTitle')}</Text>
+                <ProBadge tr={tr} />
+              </View>
+              <Text style={[styles.muted, { color: t.muted }]}>{tr('backupHint')}</Text>
+              <TouchableOpacity style={[styles.button, { backgroundColor: t.accent }]} onPress={() => gated(PRO_FEATURES.backup, exportBackup)}>
+                <Ionicons name="cloud-download-outline" size={20} color="#fff" />
+                <Text style={styles.buttonText}>{tr('backupExport')}</Text>
+              </TouchableOpacity>
+              <TextInput
+                style={[styles.input, { color: t.text, backgroundColor: t.inputBg, borderColor: t.border, minHeight: 60 }]}
+                value={restoreText}
+                onChangeText={setRestoreText}
+                placeholder={tr('backupPasteHint')}
+                placeholderTextColor={t.muted}
+                multiline
+                autoCapitalize="none"
+              />
+              <TouchableOpacity style={[styles.button, { backgroundColor: restoreText ? t.accent : t.muted }]} disabled={!restoreText} onPress={() => gated(PRO_FEATURES.backup, restoreBackup)}>
+                <Ionicons name="cloud-upload-outline" size={20} color="#fff" />
+                <Text style={styles.buttonText}>{tr('backupRestore')}</Text>
+              </TouchableOpacity>
+            </Card>
+            <Card t={t}>
+              <Text style={[styles.muted, { color: t.muted }]}>Pro: {isPro ? 'включено (тест)' : 'выключено'}</Text>
+              <TouchableOpacity style={[styles.button, { backgroundColor: t.muted }]} onPress={toggleTestPro}>
+                <Text style={styles.buttonText}>{isPro ? tr('proTestLock') : tr('proTestUnlock')}</Text>
+              </TouchableOpacity>
+            </Card>
           </>
         )}
 
         {tab === 'charts' && (
           <>
             <Chart readings={ofType(records, TYPES.bp)} t={t} tr={tr} catLabel={catLabel} />
+            <Card t={t}>
+              <View style={styles.titleRow}>
+                <Text style={[styles.h2, { color: t.text }]}>{tr('reportTitle')}</Text>
+                <ProBadge tr={tr} />
+              </View>
+              <Text style={[styles.label, { color: t.muted }]}>{tr('reportPeriod')}</Text>
+              <Chips
+                t={t}
+                small
+                items={[
+                  { key: 30, label: tr('period30') },
+                  { key: 90, label: tr('period90') },
+                  { key: 365, label: tr('period365') },
+                ]}
+                active={reportDays}
+                onPick={setReportDays}
+              />
+              <TouchableOpacity style={[styles.button, { backgroundColor: t.accent }]} onPress={() => gated(PRO_FEATURES.pdfReport, makeReport)}>
+                <Ionicons name="document-text-outline" size={20} color="#fff" />
+                <Text style={styles.buttonText}>{tr('reportMake')}</Text>
+              </TouchableOpacity>
+            </Card>
             <Card t={t}>
               <Text style={[styles.h2, { color: t.text }]}>{tr('glucoseAverage')}</Text>
               <Text style={[styles.big, { color: t.text }]}>{glucoseWeekAverage(records, units, lang)}</Text>
@@ -315,6 +456,31 @@ export default function App() {
 
         {tab === 'meds' && (
           <>
+            <Card t={t}>
+              <Text style={[styles.h2, { color: t.text }]}>{tr('intakeTitle')}</Text>
+              {meds.length === 0 ? <Text style={[styles.muted, { color: t.muted }]}>{tr('medEmpty')}</Text> : null}
+              {meds.map((m) =>
+                m.times.map((time) => {
+                  const status = statusFor(intake, m.id, dateKey(Date.now()), time);
+                  return (
+                    <View key={`${m.id}-${time}`} style={[styles.item, { borderTopColor: t.border }]}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.itemMain, { color: t.text }]}>{m.name} · {time}</Text>
+                        <Text style={[styles.muted, { color: t.muted, fontSize: 12 }]}>
+                          {status === 'taken' ? tr('intakeTaken') : status === 'missed' ? tr('intakeMissed') : tr('intakeNone')}
+                        </Text>
+                      </View>
+                      <TouchableOpacity style={[styles.chip, { borderColor: t.border, backgroundColor: status === 'taken' ? '#22c55e' : t.card }]} onPress={() => markIntake(m.id, time, INTAKE_STATUS.TAKEN)}>
+                        <Text style={[styles.chipText, { color: status === 'taken' ? '#fff' : t.text }]}>{tr('intakeTaken')}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[styles.chip, { borderColor: t.border, backgroundColor: status === 'missed' ? '#ef4444' : t.card }]} onPress={() => markIntake(m.id, time, INTAKE_STATUS.MISSED)}>
+                        <Text style={[styles.chipText, { color: status === 'missed' ? '#fff' : t.text }]}>{tr('intakeMissed')}</Text>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                }),
+              )}
+            </Card>
             <Card t={t}>
               <Text style={[styles.h2, { color: t.text }]}>{tr('medsTitle')}</Text>
               <Text style={[styles.muted, { color: t.muted }]}>{tr('medsHint')}</Text>
@@ -370,6 +536,14 @@ function glucoseWeekAverage(records, units, lang) {
   const avg = recent.reduce((a, r) => a + r.values.value, 0) / recent.length;
   const shown = units.glucose === 'mgdl' ? Math.round(avg * 18.0156) : avg.toFixed(1);
   return `${shown} ${unitLabel(TYPES.glucose, units, lang)}`;
+}
+
+function ProBadge({ tr }) {
+  return (
+    <View style={styles.proBadge}>
+      <Text style={styles.proBadgeText}>{tr('proBadge')}</Text>
+    </View>
+  );
 }
 
 function Hero({ type, records, t, tr, catLabel, units, lang, fmt }) {
@@ -536,6 +710,9 @@ const styles = StyleSheet.create({
   legend: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 8 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   legendText: { fontSize: 11 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  proBadge: { backgroundColor: '#7c3aed', borderRadius: 6, paddingVertical: 2, paddingHorizontal: 8 },
+  proBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
   tabBar: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', borderTopWidth: 1, paddingBottom: 20, paddingTop: 8 },
   tabItem: { flex: 1, alignItems: 'center', gap: 2 },
   tabLabel: { fontSize: 11, fontWeight: '500' },
