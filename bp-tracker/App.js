@@ -41,7 +41,7 @@ import { validateMed, makeMed } from './src/meds.mjs';
 import { PRO_FEATURES, isUnlocked } from './src/entitlements.mjs';
 import { INTAKE_STATUS, toggleIntake, statusFor, dateKey } from './src/intake.mjs';
 import { buildBackup, parseBackup } from './src/backup.mjs';
-import { restoreFromBackup, undoRestore, STORAGE } from './src/restore.mjs';
+import { restoreFromBackup, undoRestore, hasUndo, STORAGE } from './src/restore.mjs';
 import { buildReportHtml } from './src/report.mjs';
 import { toHealthRecord, pendingRecords, healthTypeFor, fromHealthRecord, ALL_PERMISSIONS, READ_PERMISSIONS } from './src/healthSync.mjs';
 import { canAddReminder, reminderSlots } from './src/reminders.mjs';
@@ -162,7 +162,7 @@ export default function App() {
 
   // Есть ли снимок для отмены восстановления (сохраняется между запусками).
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE.undo).then((raw) => setCanUndo(Boolean(raw))).catch(() => {});
+    refreshCanUndo();
   }, []);
 
   // При уходе с экрана отключаем прибор, если к нему подключены.
@@ -552,15 +552,21 @@ export default function App() {
           setMeds(res.data.meds);
           setIntakeList(res.data.intake);
           setUnits({ ...units, ...res.data.units });
-          setCanUndo(true);
+          refreshCanUndo();
           Alert.alert(tr('backupTitle'), tr('backupDone'));
         },
       },
     ]);
   }
 
+  // Кнопка показывает то, что реально лежит в хранилище: после перезапуска, успешной и неудачной отмены.
+  function refreshCanUndo() {
+    hasUndo(AsyncStorage).then(setCanUndo).catch(() => setCanUndo(false));
+  }
+
   async function undoLastRestore() {
     const res = await undoRestore(AsyncStorage, Date.now());
+    refreshCanUndo();
     if (!res.ok) return Alert.alert(tr('backupTitle'), tr(res.error));
     setRecords(res.data.records);
     setMeds(res.data.meds);
