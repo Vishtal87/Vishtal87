@@ -570,7 +570,6 @@ export default function App() {
                 <Ionicons name="add-circle-outline" size={20} color="#fff" />
                 <Text style={styles.buttonText}>{tr('medAdd')}</Text>
               </TouchableOpacity>
-              <Text style={[styles.muted, { color: t.muted, fontSize: 12 }]}>{tr('medRemindersSoon')}</Text>
             </Card>
             <Card t={t}>
               {meds.length === 0 ? (
