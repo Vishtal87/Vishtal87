@@ -86,7 +86,7 @@ export default function App() {
         </View>
         <TextInput
           style={styles.input}
-          placeholder="Когда? дд.мм.гггг чч:мм (пусто — сейчас)"
+          placeholder="Дата, необязательно"
           value={when}
           onChangeText={setWhen}
           autoCapitalize="none"
@@ -150,7 +150,7 @@ const styles = StyleSheet.create({
   card: { backgroundColor: '#fff', borderRadius: 12, padding: 14, gap: 8 },
   h2: { fontSize: 16, fontWeight: '600' },
   row: { flexDirection: 'row', gap: 8 },
-  input: { flex: 1, borderWidth: 1, borderColor: '#d6d3d1', borderRadius: 8, padding: 10, fontSize: 16 },
+  input: { flex: 1, minWidth: 0, borderWidth: 1, borderColor: '#d6d3d1', borderRadius: 8, padding: 10, fontSize: 16 },
   button: { backgroundColor: '#1d4ed8', borderRadius: 8, padding: 12, alignItems: 'center' },
   buttonDisabled: { backgroundColor: '#a8a29e' },
   buttonText: { color: '#fff', fontWeight: '600', fontSize: 16 },
