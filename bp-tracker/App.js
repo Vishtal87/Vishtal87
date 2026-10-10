@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  AppState,
   Linking,
   ScrollView,
   StyleSheet,
@@ -49,7 +50,8 @@ import { ruStoreAvailable, ruStorePlans, ruStoreActive, ruStoreBuy, isRuStoreCan
 import { requestBlePermissions, bluetoothPowered, scanDevices, kindOf, listenMeasurements } from './src/devices.js';
 import { chartPoints, scaleRange } from './src/chart.mjs';
 import { PRIVACY_URL, TERMS_URL } from './src/links.mjs';
-import { PRO_PLANS, PRO_SKUS, sortPlans, buildSubscriptionRequest, hasProPurchase } from './src/purchases.mjs';
+import { PRO_PLANS, PRO_SKUS, sortPlans, buildSubscriptionRequest } from './src/purchases.mjs';
+import { decodeProState, encodeProState, isProNow, nextProState, PRO_GRACE_MS } from './src/proState.mjs';
 import { translate, localeTag, detectLanguage, LANGUAGES } from './src/i18n.mjs';
 
 const RECORDS_KEY = STORAGE.records;
@@ -127,7 +129,11 @@ export default function App() {
   const [medTimes, setMedTimes] = useState('');
   const [medError, setMedError] = useState(null);
   const [editingMedId, setEditingMedId] = useState(null);
-  const [isPro, setIsPro] = useState(false);
+  // Статус Pro: { active, checkedAt }. Действует ограниченное время без новой проверки в магазине.
+  const [proState, setProState] = useState(decodeProState(null));
+  // Тестовые сборки и режим разработки не отключают Pro по сроку.
+  const proTtl = TEST_PRO_BUILD || __DEV__ ? Infinity : PRO_GRACE_MS;
+  const isPro = isProNow(proState, Date.now(), proTtl);
   // Магазин: null — ещё не известно, true — RuStore (Android), false — App Store / Google Play.
   const [ruStore, setRuStore] = useState(null);
   // Покупки магазина. Результат покупки приходит в обработчики, а не в возвращаемое значение.
@@ -138,7 +144,7 @@ export default function App() {
       } catch (e) {
         // Транзакция останется в очереди магазина и закроется при следующем запуске.
       }
-      applyPro(true);
+      commitCheck('active');
       Alert.alert(tr('subscribeTitle'), tr('purchaseDone'));
     },
     onPurchaseError: (e) => {
@@ -195,8 +201,8 @@ export default function App() {
   useEffect(() => {
     AsyncStorage.multiGet([PRO_KEY, INTAKE_KEY]).then((pairs) => {
       const [pro, intakeRaw] = pairs.map((p) => p[1]);
-      if (pro) setIsPro(pro === 'true');
-      else if (TEST_PRO_BUILD) setIsPro(true);
+      if (pro === null && TEST_PRO_BUILD) setProState({ active: true, checkedAt: Date.now() });
+      else setProState(decodeProState(pro));
       if (intakeRaw) setIntakeList(JSON.parse(intakeRaw));
     }).catch(() => {});
   }, []);
@@ -365,28 +371,36 @@ export default function App() {
     return fresh.length;
   }
 
-  // Сохраняем статус Pro на телефоне: без сети приложение покажет последнее известное состояние.
-  function applyPro(value) {
-    setIsPro(value);
-    AsyncStorage.setItem(PRO_KEY, String(value)).catch(() => {});
+  // Записываем результат проверки магазина. 'unknown' (сеть или магазин недоступны) статус не меняет.
+  function commitCheck(check) {
+    const next = nextProState(proState, check, Date.now());
+    if (next === proState) return;
+    setProState(next);
+    AsyncStorage.setItem(PRO_KEY, encodeProState(next)).catch(() => {});
   }
 
-  // Статус подписки из магазина. Сеть недоступна — оставляем сохранённое значение.
-  async function refreshStoreEntitlement(rustore) {
+  // Проверка подписки в магазине: 'active', 'inactive' или 'unknown'.
+  // rustore: true — RuStore, false — App Store / Google Play, null — магазин ещё не определён.
+  async function checkStore(rustore) {
     try {
-      const active = rustore ? await ruStoreActive() : await iap.hasActiveSubscriptions(PRO_SKUS);
-      if (active) applyPro(true);
-      else if (!TEST_PRO_BUILD && !SHOW_TEST_PRO) applyPro(false);
+      if (rustore === null) return 'unknown';
+      if (rustore) return (await ruStoreActive()) ? 'active' : 'inactive';
+      if (!iap.connected) return 'unknown';
+      return (await iap.hasActiveSubscriptions(PRO_SKUS)) ? 'active' : 'inactive';
     } catch (e) {
-      // Оставляем сохранённый статус.
+      return 'unknown';
     }
   }
+
+  // Ссылка на последнюю версию проверки: обработчик возврата в приложение вызывает её с актуальным состоянием.
+  const recheckRef = useRef(null);
+  recheckRef.current = () => checkStore(ruStore).then(commitCheck);
 
   // Определяем магазин: RuStore на Android, если он установлен. Иначе App Store или Google Play.
   useEffect(() => {
     ruStoreAvailable().then((available) => {
       setRuStore(available);
-      if (available) refreshStoreEntitlement(true);
+      if (available) checkStore(true).then(commitCheck);
     });
   }, []);
 
@@ -394,8 +408,16 @@ export default function App() {
   useEffect(() => {
     if (!iap.connected || ruStore !== false) return;
     iap.fetchProducts({ skus: PRO_SKUS, type: 'subs' }).catch(() => {});
-    refreshStoreEntitlement(false);
+    checkStore(false).then(commitCheck);
   }, [iap.connected, ruStore]);
+
+  // Возврат в приложение: подписку могли отменить, продлить или вернуть. Проверяем заново.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && recheckRef.current) recheckRef.current();
+    });
+    return () => sub.remove();
+  }, []);
 
   async function openPaywall() {
     const plans = ruStore ? await ruStorePlans().catch(() => []) : sortPlans(iap.subscriptions);
@@ -412,7 +434,7 @@ export default function App() {
     if (ruStore) {
       try {
         await ruStoreBuy(product.id);
-        applyPro(true);
+        commitCheck('active');
         Alert.alert(tr('subscribeTitle'), tr('purchaseDone'));
       } catch (e) {
         if (!isRuStoreCancel(e)) Alert.alert(tr('subscribeTitle'), tr('purchaseFailed'));
@@ -430,23 +452,21 @@ export default function App() {
 
   async function restorePurchase() {
     try {
-      if (ruStore) {
-        const active = await ruStoreActive();
-        applyPro(active);
-        return Alert.alert(tr('restorePurchases'), tr(active ? 'restoreDone' : 'restoreNone'));
-      }
-      await iap.restorePurchases();
-      const active = await iap.hasActiveSubscriptions(PRO_SKUS);
-      applyPro(active || hasProPurchase(iap.availablePurchases));
-      Alert.alert(tr('restorePurchases'), tr(active ? 'restoreDone' : 'restoreNone'));
+      if (ruStore === false) await iap.restorePurchases();
+      const check = await checkStore(ruStore);
+      if (check === 'unknown') return Alert.alert(tr('restorePurchases'), tr('purchaseFailed'));
+      commitCheck(check);
+      Alert.alert(tr('restorePurchases'), tr(check === 'active' ? 'restoreDone' : 'restoreNone'));
     } catch (e) {
       Alert.alert(tr('restorePurchases'), tr('purchaseFailed'));
     }
   }
 
+  // Тестовый переключатель (только сборки с флагом и режим разработки).
   function toggleTestPro() {
-    const next = !isPro;
-    applyPro(next);
+    const next = { active: !isPro, checkedAt: Date.now() };
+    setProState(next);
+    AsyncStorage.setItem(PRO_KEY, encodeProState(next)).catch(() => {});
   }
 
   // Функция доступна с Pro. Без Pro показываем заглушку и кнопку теста.
