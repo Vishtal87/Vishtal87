@@ -64,3 +64,15 @@ test('makeReading приводит числа и пустой пульс к null
   assert.equal(r.pulse, null);
   assert.equal(r.takenAt, 1000);
 });
+
+test('дата: пусто — сейчас, полная дата и время, ошибки', async () => {
+  const { parseTakenAt } = await import('../src/bp.mjs');
+  const now = new Date(2026, 9, 10, 12, 0).getTime();
+  assert.equal(parseTakenAt('', now).takenAt, now);
+  assert.equal(parseTakenAt('  ', now).takenAt, now);
+  assert.equal(parseTakenAt('01.10.2026 08:30', now).takenAt, new Date(2026, 9, 1, 8, 30).getTime());
+  assert.equal(parseTakenAt('5.3.2026', now).takenAt, new Date(2026, 2, 5, 0, 0).getTime());
+  assert.match(parseTakenAt('31.02.2026', now).error, /не существует/);
+  assert.match(parseTakenAt('11.10.2026', now).error, /будущем/);
+  assert.match(parseTakenAt('вчера', now).error, /дд\.мм/);
+});

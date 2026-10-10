@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Alert } from 'react-native';
+import { Alert, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import {
@@ -7,6 +7,7 @@ import {
   averageForDays,
   classify,
   makeReading,
+  parseTakenAt,
   sortNewestFirst,
   toCsv,
   validate,
@@ -28,6 +29,7 @@ export default function App() {
   const [systolic, setSystolic] = useState('');
   const [diastolic, setDiastolic] = useState('');
   const [pulse, setPulse] = useState('');
+  const [when, setWhen] = useState('');
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -49,11 +51,14 @@ export default function App() {
     const v = { systolic, diastolic, pulse };
     const problem = validate(v);
     if (problem) return setError(problem);
+    const date = parseTakenAt(when);
+    if (date.error) return setError(date.error);
     setError(null);
-    setReadings((prev) => [makeReading(v), ...prev]);
+    setReadings((prev) => [makeReading(v, date.takenAt), ...prev]);
     setSystolic('');
     setDiastolic('');
     setPulse('');
+    setWhen('');
   }
 
   function remove(id) {
@@ -79,6 +84,13 @@ export default function App() {
           <TextInput style={styles.input} placeholder="Низ" keyboardType="number-pad" value={diastolic} onChangeText={setDiastolic} />
           <TextInput style={styles.input} placeholder="Пульс" keyboardType="number-pad" value={pulse} onChangeText={setPulse} />
         </View>
+        <TextInput
+          style={styles.input}
+          placeholder="Когда? дд.мм.гггг чч:мм (пусто — сейчас)"
+          value={when}
+          onChangeText={setWhen}
+          autoCapitalize="none"
+        />
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <TouchableOpacity style={styles.button} onPress={save}>
           <Text style={styles.buttonText}>Сохранить</Text>
@@ -117,8 +129,14 @@ export default function App() {
 
       <View style={styles.card}>
         <Text style={styles.h2}>Экспорт</Text>
-        <Text style={styles.muted}>CSV для врача или для себя. Первые строки:</Text>
-        <Text selectable style={styles.code}>{toCsv(readings).split('\n').slice(0, 4).join('\n')}</Text>
+        <Text style={styles.muted}>Отправить все записи в CSV (почта, мессенджер, файлы):</Text>
+        <TouchableOpacity
+          style={[styles.button, readings.length === 0 && styles.buttonDisabled]}
+          disabled={readings.length === 0}
+          onPress={() => Share.share({ title: 'Дневник давления', message: toCsv(readings) })}
+        >
+          <Text style={styles.buttonText}>Поделиться CSV</Text>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );
@@ -134,6 +152,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: 8 },
   input: { flex: 1, borderWidth: 1, borderColor: '#d6d3d1', borderRadius: 8, padding: 10, fontSize: 16 },
   button: { backgroundColor: '#1d4ed8', borderRadius: 8, padding: 12, alignItems: 'center' },
+  buttonDisabled: { backgroundColor: '#a8a29e' },
   buttonText: { color: '#fff', fontWeight: '600', fontSize: 16 },
   error: { color: '#dc2626' },
   big: { fontSize: 22, fontWeight: '600' },

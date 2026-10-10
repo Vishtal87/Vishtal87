@@ -78,7 +78,8 @@ export function toCsv(readings) {
   return [header, ...rows].join('\n');
 }
 
-export function makeReading({ systolic, diastolic, pulse }, now = Date.now()) {
+export function makeReading({ systolic, diastolic, pulse }, takenAt = Date.now()) {
+  const now = takenAt;
   return {
     id: `${now}-${Math.random().toString(36).slice(2, 8)}`,
     takenAt: now,
@@ -86,4 +87,24 @@ export function makeReading({ systolic, diastolic, pulse }, now = Date.now()) {
     diastolic: Number(diastolic),
     pulse: pulse === '' || pulse === undefined || pulse === null ? null : Number(pulse),
   };
+}
+
+// Дата и время из строки «дд.мм.гггг чч:мм». Пустая строка — сейчас.
+// Возвращает миллисекунды или текст ошибки в поле error.
+export function parseTakenAt(text, now = Date.now()) {
+  const raw = (text ?? '').trim();
+  if (raw === '') return { takenAt: now, error: null };
+  const m = raw.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:\s+(\d{1,2}):(\d{2}))?$/);
+  if (!m) return { takenAt: null, error: 'Дата: дд.мм.гггг или дд.мм.гггг чч:мм' };
+  const [, dd, mm, yyyy, hh = '0', mi = '0'] = m;
+  const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(mi));
+  const valid =
+    d.getFullYear() === Number(yyyy) &&
+    d.getMonth() === Number(mm) - 1 &&
+    d.getDate() === Number(dd) &&
+    Number(hh) < 24 &&
+    Number(mi) < 60;
+  if (!valid) return { takenAt: null, error: 'Такой даты не существует' };
+  if (d.getTime() > now + 60 * 1000) return { takenAt: null, error: 'Дата не может быть в будущем' };
+  return { takenAt: d.getTime(), error: null };
 }
