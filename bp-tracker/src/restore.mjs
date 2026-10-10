@@ -29,11 +29,12 @@ async function readAll(storage, keys) {
   return out;
 }
 
-// Запись по очереди. При первой ошибке останавливаемся: часть значений уже записана.
+// Запись по очереди. Значение null означает удаление ключа. При первой ошибке останавливаемся: часть значений уже записана.
 async function writeAll(storage, values) {
   for (const [key, value] of Object.entries(values)) {
     try {
-      await storage.setItem(key, value);
+      if (value === null) await storage.removeItem(key);
+      else await storage.setItem(key, value);
     } catch (cause) {
       return { ok: false, failedKey: key, cause: describe(cause) };
     }
@@ -126,7 +127,15 @@ export async function restoreFromBackup(storage, text, current, now = Date.now()
   return writeError(outcome);
 }
 
-// Возвращает данные из последнего снимка до восстановления. Запись тоже атомарна.
+// Есть ли снимок, который можно вернуть. Читается из хранилища, поэтому актуально и после перезапуска.
+export async function hasUndo(storage) {
+  return Boolean(await storage.getItem(STORAGE.undo));
+}
+
+// Возвращает данные из последнего снимка до восстановления.
+// Снимок удаляется в той же транзакции, что и запись данных, и последним шагом. Поэтому:
+// - после успешной отмены повторная отмена не найдёт снимок и ничего не перезапишет;
+// - если отмена не удалась, откат возвращает и данные, и снимок, и он остаётся доступен для повтора.
 export async function undoRestore(storage, now = Date.now()) {
   let text;
   try {
@@ -138,7 +147,8 @@ export async function undoRestore(storage, now = Date.now()) {
   const parsed = parseBackup(text, now);
   if (parsed.error) return failure(parsed.error);
 
-  const outcome = await transact(storage, valuesFrom(parsed.data, { units: {} }));
+  const values = { ...valuesFrom(parsed.data, { units: {} }), [STORAGE.undo]: null };
+  const outcome = await transact(storage, values);
   if (outcome.ok) return { ok: true, error: null, data: parsed.data, failedKey: null, rollback: null };
   return writeError(outcome);
 }

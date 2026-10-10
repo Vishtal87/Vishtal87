@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { restoreFromBackup, undoRestore, STORAGE } from '../src/restore.mjs';
+import { restoreFromBackup, undoRestore, hasUndo, STORAGE } from '../src/restore.mjs';
 import { buildBackup } from '../src/backup.mjs';
 import { TYPES } from '../src/measurements.mjs';
 
@@ -201,4 +201,85 @@ test('повреждённый снимок не применяется при �
   const u = await undoRestore(store, NOW);
   assert.equal(u.ok, false);
   assert.deepEqual(snapshotOf(store), before);
+});
+
+// Отмена: снимок применяется один раз. Кнопка и повтор отмены опираются на фактическое наличие снимка.
+
+test('успешная отмена снимает снимок: повторная отмена не затирает более новые изменения', async () => {
+  const store = memory(seeded());
+  await restoreFromBackup(store, NEW_TEXT, current(), NOW);
+  const first = await undoRestore(store, NOW);
+  assert.equal(first.ok, true);
+  assert.equal(store.data.has(STORAGE.undo), false, 'снимок удалён в той же операции');
+
+  // Пользователь после отмены изменил данные.
+  const laterRecords = JSON.stringify([rec('later', 150)]);
+  store.data.set(STORAGE.records, laterRecords);
+
+  const second = await undoRestore(store, NOW);
+  assert.equal(second.ok, false);
+  assert.equal(second.error, 'err_restore_none');
+  assert.equal(store.data.get(STORAGE.records), laterRecords, 'изменения пользователя сохранены');
+  assert.equal(await hasUndo(store), false);
+});
+
+test('сбой отмены на записи данных: снимок остаётся, повтор отмены проходит', async () => {
+  const store = memory(seeded());
+  await restoreFromBackup(store, NEW_TEXT, current(), NOW);
+  const snapshotBefore = store.data.get(STORAGE.undo);
+  const dataBefore = snapshotOf(store);
+
+  const failing = memory(Object.fromEntries(store.data), [{ op: 'setItem', key: STORAGE.meds, after: 0, times: 1 }]);
+  const failed = await undoRestore(failing, NOW);
+  assert.equal(failed.ok, false);
+  assert.equal(failed.error, 'err_restore_write');
+  assert.equal(failed.rollback.verified, true);
+  assert.equal(failing.data.get(STORAGE.undo), snapshotBefore, 'снимок на месте и не изменён');
+  assert.equal(await hasUndo(failing), true);
+  assert.deepEqual(snapshotOf(failing), dataBefore, 'данные не изменились');
+
+  // Повтор без сбоев.
+  const retried = await undoRestore(failing, NOW);
+  assert.equal(retried.ok, true);
+  assert.deepEqual(retried.data.records.map((x) => x.id), ['old1', 'old2']);
+  assert.equal(await hasUndo(failing), false);
+});
+
+test('сбой на удалении снимка (последний шаг): откат возвращает данные и снимок', async () => {
+  const store = memory(seeded());
+  await restoreFromBackup(store, NEW_TEXT, current(), NOW);
+  const dataBefore = snapshotOf(store);
+  const snapshotBefore = store.data.get(STORAGE.undo);
+
+  const failing = memory(Object.fromEntries(store.data), [{ op: 'removeItem', key: STORAGE.undo, after: 0, times: 1 }]);
+  const failed = await undoRestore(failing, NOW);
+  assert.equal(failed.error, 'err_restore_write');
+  assert.equal(failed.rollback.verified, true);
+  assert.equal(failing.data.get(STORAGE.undo), snapshotBefore);
+  assert.deepEqual(snapshotOf(failing), dataBefore);
+});
+
+test('сбой отката при отмене: ошибка честная, неподтверждённые ключи названы', async () => {
+  const store = memory(seeded());
+  await restoreFromBackup(store, NEW_TEXT, current(), NOW);
+  const failing = memory(Object.fromEntries(store.data), [
+    { op: 'setItem', key: STORAGE.meds, after: 0, times: 1 },
+    { op: 'setItem', key: STORAGE.records, after: 1, times: 1 },
+  ]);
+  const failed = await undoRestore(failing, NOW);
+  assert.equal(failed.error, 'err_restore_rollback_failed');
+  assert.equal(failed.rollback.verified, false);
+  assert.ok(failed.rollback.unverifiedKeys.includes(STORAGE.records));
+});
+
+test('наличие снимка читается из хранилища: после «перезапуска» кнопка соответствует факту', async () => {
+  const store = memory(seeded());
+  assert.equal(await hasUndo(store), false, 'до восстановления снимка нет');
+  await restoreFromBackup(store, NEW_TEXT, current(), NOW);
+  // Новый объект поверх тех же данных — как после перезапуска приложения.
+  const restarted = memory(Object.fromEntries(store.data));
+  assert.equal(await hasUndo(restarted), true);
+  await undoRestore(restarted, NOW);
+  const afterRestart = memory(Object.fromEntries(restarted.data));
+  assert.equal(await hasUndo(afterRestart), false);
 });
