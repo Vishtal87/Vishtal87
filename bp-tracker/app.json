@@ -60,6 +60,12 @@
           "neverForLocation": true,
           "bluetoothAlwaysPermission": "Подключение тонометра, глюкометра и весов, чтобы записывать измерения в дневник."
         }
+      ],
+      [
+        "./plugins/withRuStorePay",
+        {
+          "consoleAppId": ""
+        }
       ]
     ]
   }

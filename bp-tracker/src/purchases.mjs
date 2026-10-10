@@ -39,3 +39,16 @@ export function buildSubscriptionRequest(product, platform) {
 export function hasProPurchase(purchases) {
   return (purchases ?? []).some((p) => PRO_SKUS.includes(p.productId ?? p.id));
 }
+
+// Покупки RuStore: подписка Pro активна, если статус ACTIVE и срок ещё не истёк.
+export function hasActiveRuStorePurchase(purchases, now = Date.now()) {
+  return (purchases ?? []).some((p) => {
+    const s = p.subscriptionPurchase;
+    if (!s || !PRO_SKUS.includes(s.productId) || s.status !== 'ACTIVE') return false;
+    const expires = Date.parse(s.expirationDate);
+    return !Number.isNaN(expires) && expires > now;
+  });
+}
+
+// Код отмены покупки в RuStore: пользователь закрыл окно оплаты, это не ошибка.
+export const RUSTORE_CANCELLED = 'ProductPurchaseCancelled';

@@ -44,6 +44,7 @@ import { buildReportHtml } from './src/report.mjs';
 import { toHealthRecord, pendingRecords, healthTypeFor, fromHealthRecord, ALL_PERMISSIONS, READ_PERMISSIONS } from './src/healthSync.mjs';
 import { canAddReminder, reminderSlots } from './src/reminders.mjs';
 import { DEVICE_KINDS } from './src/ble.mjs';
+import { ruStoreAvailable, ruStorePlans, ruStoreActive, ruStoreBuy, isRuStoreCancel } from './src/rustore.js';
 import { requestBlePermissions, bluetoothPowered, scanDevices, kindOf, listenMeasurements } from './src/devices.js';
 import { chartPoints, scaleRange } from './src/chart.mjs';
 import { PRIVACY_URL, TERMS_URL } from './src/links.mjs';
@@ -126,6 +127,8 @@ export default function App() {
   const [medError, setMedError] = useState(null);
   const [editingMedId, setEditingMedId] = useState(null);
   const [isPro, setIsPro] = useState(false);
+  // Магазин: null — ещё не известно, true — RuStore (Android), false — App Store / Google Play.
+  const [ruStore, setRuStore] = useState(null);
   // Покупки магазина. Результат покупки приходит в обработчики, а не в возвращаемое значение.
   const iap = useIAP({
     onPurchaseSuccess: async (purchase) => {
@@ -362,9 +365,9 @@ export default function App() {
   }
 
   // Статус подписки из магазина. Сеть недоступна — оставляем сохранённое значение.
-  async function refreshStoreEntitlement() {
+  async function refreshStoreEntitlement(rustore) {
     try {
-      const active = await iap.hasActiveSubscriptions(PRO_SKUS);
+      const active = rustore ? await ruStoreActive() : await iap.hasActiveSubscriptions(PRO_SKUS);
       if (active) applyPro(true);
       else if (!TEST_PRO_BUILD && !SHOW_TEST_PRO) applyPro(false);
     } catch (e) {
@@ -372,15 +375,23 @@ export default function App() {
     }
   }
 
-  // Загружаем тарифы и проверяем подписку, когда магазин подключился.
+  // Определяем магазин: RuStore на Android, если он установлен. Иначе App Store или Google Play.
   useEffect(() => {
-    if (!iap.connected) return;
-    iap.fetchProducts({ skus: PRO_SKUS, type: 'subs' }).catch(() => {});
-    refreshStoreEntitlement();
-  }, [iap.connected]);
+    ruStoreAvailable().then((available) => {
+      setRuStore(available);
+      if (available) refreshStoreEntitlement(true);
+    });
+  }, []);
 
-  function openPaywall() {
-    const plans = sortPlans(iap.subscriptions);
+  // Для App Store и Google Play: тарифы и проверка подписки, когда магазин подключился.
+  useEffect(() => {
+    if (!iap.connected || ruStore !== false) return;
+    iap.fetchProducts({ skus: PRO_SKUS, type: 'subs' }).catch(() => {});
+    refreshStoreEntitlement(false);
+  }, [iap.connected, ruStore]);
+
+  async function openPaywall() {
+    const plans = ruStore ? await ruStorePlans().catch(() => []) : sortPlans(iap.subscriptions);
     if (plans.length === 0) return Alert.alert(tr('subscribeTitle'), tr('subscribeNotReady'));
     const buttons = plans.map((product) => ({
       text: `${tr(product.id === PRO_PLANS.yearly ? 'planYearly' : 'planMonthly')} — ${product.displayPrice}`,
@@ -391,6 +402,16 @@ export default function App() {
   }
 
   async function buyPlan(product) {
+    if (ruStore) {
+      try {
+        await ruStoreBuy(product.id);
+        applyPro(true);
+        Alert.alert(tr('subscribeTitle'), tr('purchaseDone'));
+      } catch (e) {
+        if (!isRuStoreCancel(e)) Alert.alert(tr('subscribeTitle'), tr('purchaseFailed'));
+      }
+      return;
+    }
     const request = buildSubscriptionRequest(product, Platform.OS);
     if (!request) return Alert.alert(tr('subscribeTitle'), tr('subscribeNotReady'));
     try {
@@ -402,6 +423,11 @@ export default function App() {
 
   async function restorePurchase() {
     try {
+      if (ruStore) {
+        const active = await ruStoreActive();
+        applyPro(active);
+        return Alert.alert(tr('restorePurchases'), tr(active ? 'restoreDone' : 'restoreNone'));
+      }
       await iap.restorePurchases();
       const active = await iap.hasActiveSubscriptions(PRO_SKUS);
       applyPro(active || hasProPurchase(iap.availablePurchases));

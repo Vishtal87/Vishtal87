@@ -44,6 +44,10 @@ if (!existsSync(join(root, 'site/privacy.html')) || !existsSync(join(root, 'site
 warnings.push('Включите GitHub Pages (Settings → Pages → ветка с этим кодом, папка /) и проверьте, что открываются ссылки из src/links.mjs.');
 
 if (!existsSync(join(root, 'eas.json'))) blockers.push('Нет eas.json.');
+const ruStorePlugin = (app.plugins ?? []).find((p) => Array.isArray(p) && p[0] === './plugins/withRuStorePay');
+if (!ruStorePlugin?.[1]?.consoleAppId) {
+  warnings.push('Не задан consoleAppId в плагине ./plugins/withRuStorePay (app.json): без него оплата в RuStore не заработает.');
+}
 if (!app.extra?.eas?.projectId) {
   warnings.push('Нет expo.extra.eas.projectId: выполните `npx eas init` от аккаунта Expo (это действие в вашем аккаунте).');
 }

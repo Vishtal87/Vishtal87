@@ -30,7 +30,7 @@
 
 ## 4. Покупки
 
-Подписка Pro оформляется через App Store или RuStore. Оплату, данные карты и платёжные реквизиты обрабатывает магазин приложений. Разработчик эти данные не видит.
+Подписка Pro оформляется через App Store или RuStore. Оплату, данные карты и платёжные реквизиты обрабатывает магазин приложений. Разработчик эти данные не видит. Для оплаты подписки в RuStore нужен вход через VK ID: его данные обрабатывает RuStore и VK по своим правилам. Приложение получает только статус подписки.
 
 ## 5. Разрешения
 
@@ -72,7 +72,7 @@
 
 The app has no ads, no analytics, no tracking SDKs and does not share data with third parties.
 
-**Purchases.** Pro subscriptions are processed by the App Store or RuStore. The developer does not receive payment details.
+**Purchases.** Pro subscriptions are processed by the App Store or RuStore. The developer does not receive payment details. Paying for a subscription in RuStore requires signing in with VK ID, which RuStore and VK handle under their own terms. The app only receives the subscription status.
 
 **Permissions.** Health Connect (optional; read and write of blood pressure, glucose and weight), Bluetooth (optional; connecting blood pressure monitors, glucose meters and scales; location is not used), notifications (local medicine reminders, scheduled on the device only) and the system share and file picker. The app does not request contacts, camera, location or microphone access.
 

@@ -134,3 +134,17 @@ test('ссылки на документы указывают на https', () =>
   assert.match(PRIVACY_URL, /^https:\/\//);
   assert.match(TERMS_URL, /^https:\/\//);
 });
+
+import { hasActiveRuStorePurchase, RUSTORE_CANCELLED } from '../src/purchases.mjs';
+
+test('RuStore: подписка Pro активна только со статусом ACTIVE и не истёкшим сроком', () => {
+  const now = Date.parse('2026-10-10T12:00:00Z');
+  const sub = (status, expirationDate, productId = PRO_PLANS.monthly) => ({ subscriptionPurchase: { status, expirationDate, productId } });
+  assert.equal(hasActiveRuStorePurchase([sub('ACTIVE', '2026-11-10T12:00:00Z')], now), true);
+  assert.equal(hasActiveRuStorePurchase([sub('ACTIVE', '2026-09-10T12:00:00Z')], now), false);
+  assert.equal(hasActiveRuStorePurchase([sub('CANCELLED', '2026-11-10T12:00:00Z')], now), false);
+  assert.equal(hasActiveRuStorePurchase([sub('ACTIVE', '2026-11-10T12:00:00Z', 'other')], now), false);
+  assert.equal(hasActiveRuStorePurchase([{ productPurchase: { status: 'CONFIRMED' } }], now), false);
+  assert.equal(hasActiveRuStorePurchase(null, now), false);
+  assert.equal(RUSTORE_CANCELLED, 'ProductPurchaseCancelled');
+});
