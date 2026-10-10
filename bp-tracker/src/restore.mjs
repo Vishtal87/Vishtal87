@@ -1,6 +1,7 @@
 // Восстановление из резервной копии с защитой данных.
 // Порядок: 1) проверка файла, 2) снимок текущих данных, 3) запись новых значений.
-// Если снимок не сохранён — ничего не меняем. Если запись прервалась — возвращаем старые значения.
+// Если запись прервалась, прежние значения возвращаются и проверяются чтением.
+// Прежние данные считаются восстановленными только если чтение подтвердило каждое значение.
 import { buildBackup, parseBackup } from './backup.mjs';
 
 export const STORAGE = Object.freeze({
@@ -11,27 +12,84 @@ export const STORAGE = Object.freeze({
   undo: 'restore-undo-v1',
 });
 
-// storage — объект с методами getItem, setItem, removeItem (подходит AsyncStorage).
-async function writeAll(storage, values) {
-  const previous = {};
-  for (const key of Object.keys(values)) previous[key] = await storage.getItem(key);
-  try {
-    for (const [key, value] of Object.entries(values)) await storage.setItem(key, value);
-  } catch (e) {
-    await restoreRaw(storage, previous);
-    throw e;
-  }
+// Ошибки, которые видит пользователь. err_restore_write — только когда откат подтверждён.
+const ERR = Object.freeze({
+  snapshot: 'err_restore_snapshot',
+  write: 'err_restore_write',
+  rollback: 'err_restore_rollback_failed',
+  none: 'err_restore_none',
+});
+
+const describe = (cause) => (cause && cause.message) || String(cause);
+
+// Значения всех ключей до записи. Ошибка чтения здесь означает: писать ничего нельзя.
+async function readAll(storage, keys) {
+  const out = {};
+  for (const key of keys) out[key] = await storage.getItem(key);
+  return out;
 }
 
-async function restoreRaw(storage, previous) {
+// Запись по очереди. При первой ошибке останавливаемся: часть значений уже записана.
+async function writeAll(storage, values) {
+  for (const [key, value] of Object.entries(values)) {
+    try {
+      await storage.setItem(key, value);
+    } catch (cause) {
+      return { ok: false, failedKey: key, cause: describe(cause) };
+    }
+  }
+  return { ok: true };
+}
+
+// Возвращает прежние значения и проверяет каждое чтением. Ошибки не скрываются: они попадают в details.
+async function rollback(storage, previous) {
+  const details = [];
   for (const [key, value] of Object.entries(previous)) {
     try {
       if (value === null) await storage.removeItem(key);
       else await storage.setItem(key, value);
-    } catch (e) {
-      // Откат — лучшая попытка. Если и он не удался, ошибка уже будет показана пользователю.
+    } catch (cause) {
+      details.push({ key, stage: 'rollback-write', cause: describe(cause) });
     }
   }
+  const unverifiedKeys = [];
+  for (const [key, value] of Object.entries(previous)) {
+    try {
+      const actual = await storage.getItem(key);
+      if (actual !== value) {
+        unverifiedKeys.push(key);
+        details.push({ key, stage: 'verify', cause: 'значение не совпало с прежним' });
+      }
+    } catch (cause) {
+      unverifiedKeys.push(key);
+      details.push({ key, stage: 'verify', cause: describe(cause) });
+    }
+  }
+  return { verified: unverifiedKeys.length === 0, unverifiedKeys, details };
+}
+
+// Запись набора ключей как одной операции. Возвращает либо { ok: true }, либо причину и результат отката.
+async function transact(storage, values) {
+  let previous;
+  try {
+    previous = await readAll(storage, Object.keys(values));
+  } catch (cause) {
+    return { ok: false, stage: 'read', cause: describe(cause), rollback: { verified: true, unverifiedKeys: [], details: [] } };
+  }
+  const written = await writeAll(storage, values);
+  if (written.ok) return { ok: true };
+  const back = await rollback(storage, previous);
+  return { ok: false, stage: 'write', failedKey: written.failedKey, cause: written.cause, rollback: back };
+}
+
+function failure(error, outcome = null) {
+  return {
+    ok: false,
+    error,
+    data: null,
+    failedKey: outcome?.failedKey ?? null,
+    rollback: outcome?.rollback ?? null,
+  };
 }
 
 function valuesFrom(data, current) {
@@ -43,36 +101,44 @@ function valuesFrom(data, current) {
   };
 }
 
-// Возвращает { ok, error, data }. При ok=false данные не изменены.
+// Ошибка записи: если откат подтверждён — err_restore_write, иначе — err_restore_rollback_failed.
+function writeError(outcome) {
+  if (outcome.stage === 'read') return failure(ERR.snapshot, outcome);
+  return failure(outcome.rollback.verified ? ERR.write : ERR.rollback, outcome);
+}
+
+// Возвращает { ok, error, data, failedKey, rollback }. При ok=false поле rollback говорит, что известно о хранилище.
 export async function restoreFromBackup(storage, text, current, now = Date.now()) {
   const parsed = parseBackup(text, now);
-  if (parsed.error) return { ok: false, error: parsed.error, data: null };
+  if (parsed.error) return failure(parsed.error);
 
   const snapshot = buildBackup(current, now);
   try {
     await storage.setItem(STORAGE.undo, snapshot);
-  } catch (e) {
-    return { ok: false, error: 'err_restore_snapshot', data: null };
+  } catch (cause) {
+    return failure(ERR.snapshot, { failedKey: STORAGE.undo, rollback: { verified: true, unverifiedKeys: [], details: [{ key: STORAGE.undo, stage: 'snapshot-write', cause: describe(cause) }] } });
   }
 
-  try {
-    await writeAll(storage, valuesFrom(parsed.data, current));
-  } catch (e) {
-    return { ok: false, error: 'err_restore_write', data: null };
+  const outcome = await transact(storage, valuesFrom(parsed.data, current));
+  if (outcome.ok) {
+    return { ok: true, error: null, data: { ...parsed.data, units: { ...current.units, ...parsed.data.units } }, failedKey: null, rollback: null };
   }
-  return { ok: true, error: null, data: { ...parsed.data, units: { ...current.units, ...parsed.data.units } } };
+  return writeError(outcome);
 }
 
-// Возвращает данные из последнего снимка до восстановления.
+// Возвращает данные из последнего снимка до восстановления. Запись тоже атомарна.
 export async function undoRestore(storage, now = Date.now()) {
-  const text = await storage.getItem(STORAGE.undo);
-  if (!text) return { ok: false, error: 'err_restore_none', data: null };
-  const parsed = parseBackup(text, now);
-  if (parsed.error) return { ok: false, error: parsed.error, data: null };
+  let text;
   try {
-    await writeAll(storage, valuesFrom(parsed.data, { units: {} }));
-  } catch (e) {
-    return { ok: false, error: 'err_restore_write', data: null };
+    text = await storage.getItem(STORAGE.undo);
+  } catch (cause) {
+    return failure(ERR.snapshot);
   }
-  return { ok: true, error: null, data: parsed.data };
+  if (!text) return failure(ERR.none);
+  const parsed = parseBackup(text, now);
+  if (parsed.error) return failure(parsed.error);
+
+  const outcome = await transact(storage, valuesFrom(parsed.data, { units: {} }));
+  if (outcome.ok) return { ok: true, error: null, data: parsed.data, failedKey: null, rollback: null };
+  return writeError(outcome);
 }
