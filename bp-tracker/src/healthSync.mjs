@@ -1,6 +1,6 @@
 // Перевод записей дневника в формат Health Connect (Android).
 // Значения перечислений совпадают с константами библиотеки react-native-health-connect (constants.ts).
-// Записи пишутся с clientRecordId = id записи в дневнике, поэтому повтор не создаёт дубликат.
+// Записи пишутся с clientRecordId = id записи в дневнике. При правке версия растёт, и Health Connect заменяет запись, а не дублирует её.
 import { TYPES } from './measurements.mjs';
 
 export const HC = Object.freeze({
@@ -20,7 +20,7 @@ const CONTEXT_TO_RELATION = {
 
 // Время в ISO 8601. Для Health Connect нужен момент, а не локальная дата.
 function metadataFor(record) {
-  return { clientRecordId: record.id, clientRecordVersion: 1 };
+  return { clientRecordId: record.id, clientRecordVersion: record.version ?? 1 };
 }
 
 // Возвращает объект записи для insertRecords или null, если тип не поддерживается.
@@ -75,4 +75,12 @@ export const WRITE_PERMISSIONS = Object.freeze([
 export function pendingRecords(records, syncedIds) {
   const done = new Set(syncedIds);
   return records.filter((r) => !done.has(r.id) && toHealthRecord(r) !== null);
+}
+
+// Тип записи Health Connect для типа измерения. Нужен, чтобы удалить уже отправленную запись.
+export function healthTypeFor(type) {
+  if (type === TYPES.bp) return 'BloodPressure';
+  if (type === TYPES.glucose) return 'BloodGlucose';
+  if (type === TYPES.weight) return 'Weight';
+  return null;
 }

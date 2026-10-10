@@ -36,6 +36,8 @@
 
 - **Health Connect** (Android, по желанию): запись измерений давления, глюкозы и веса. Включается только при подключении в приложении и отключается в настройках Health Connect.
 - **Общий доступ к файлам**: нужен только для отправки экспортированного файла через системное окно.
+- **Уведомления**: напоминания о приёме лекарств. Они создаются на телефоне по расписанию, который задали вы. На сервер ничего не отправляется.
+- **Выбор файла**: для восстановления резервной копии приложение открывает системный выбор файла. Читается только выбранный вами файл.
 
 Приложение не запрашивает доступ к контактам, камере, геолокации и микрофону.
 
@@ -71,7 +73,7 @@ The app has no ads, no analytics, no tracking SDKs and does not share data with 
 
 **Purchases.** Pro subscriptions are processed by the App Store or Google Play. The developer does not receive payment details.
 
-**Permissions.** Health Connect (optional, write-only) and the system share sheet. The app does not request contacts, camera, location or microphone access.
+**Permissions.** Health Connect (optional, write-only), notifications (local medicine reminders, scheduled on the device only) and the system share and file picker. The app does not request contacts, camera, location or microphone access.
 
 **Retention and deletion.** Data stays on the device until you delete it in the app or uninstall the app. Records written to Health Connect are managed in Health Connect.
 

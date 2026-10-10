@@ -80,7 +80,7 @@ test('лекарства: время нормализуется, дубли уб
   assert.deepEqual(ok.times, ['08:00', '20:00']);
   assert.equal(validateMed({ name: '', times: '08:00' }).error, 'err_med_name');
   assert.equal(validateMed({ name: 'A', times: '25:00' }).error, 'err_med_times');
-  assert.equal(validateMed({ name: 'A', times: '' }).error, 'err_med_times');
+  assert.deepEqual(validateMed({ name: 'A', times: '' }).times, []);
   const med = makeMed({ name: 'A', times: ['08:00'] }, 1);
   assert.match(med.id, /^med-/);
 });

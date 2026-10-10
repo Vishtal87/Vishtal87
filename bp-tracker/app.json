@@ -24,6 +24,7 @@
     },
     "plugins": [
       "expo-sharing",
+      "expo-notifications",
       "react-native-health-connect",
       [
         "expo-build-properties",

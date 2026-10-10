@@ -126,3 +126,11 @@ export function toCsvRecords(records, lang, units = {}, classifyBp) {
   });
   return [header, ...rows].join('\n');
 }
+
+// Обратное к toCanonical: значение в единицах, которые выбрал пользователь, для поля редактирования.
+export function toInputUnits(type, canonical, unit) {
+  const rounded = (x) => Math.round(x * 10) / 10;
+  if (type === TYPES.glucose && unit === 'mgdl') return rounded(canonical * MMOL_TO_MGDL);
+  if (type === TYPES.weight && unit === 'lb') return rounded(canonical * LB_PER_KG);
+  return canonical;
+}

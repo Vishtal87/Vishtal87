@@ -108,3 +108,10 @@ export function parseTakenAt(text, now = Date.now()) {
 }
 
 export { localeTag };
+
+// Обратное к parseTakenAt: дата в формате поля ввода «ДД.ММ.ГГГГ ЧЧ:ММ».
+export function formatTakenAt(ms) {
+  const d = new Date(ms);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}

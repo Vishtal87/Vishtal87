@@ -25,7 +25,7 @@
 - артериальное давление и пульс — категория по таблице AHA 2017 для каждой записи;
 - уровень сахара в крови — с отметкой «натощак», «до еды», «после еды» или «перед сном»;
 - вес;
-- приём лекарств и отметки о приёме (Pro).
+- приём лекарств: время приёма, напоминания и отметки «принял» / «пропустил» (журнал — Pro, напоминания для одного лекарства бесплатно);
 
 Что есть:
 - история и графики за выбранный период;
@@ -50,7 +50,7 @@ Record:
 - blood pressure and pulse, with the AHA 2017 category for each reading;
 - blood glucose, tagged as fasting, before meal, after meal or bedtime;
 - weight;
-- medicine intake and intake marks (Pro).
+- medicine times with reminders, and "taken" / "missed" marks (intake log is Pro; reminders for one medicine are free).
 
 Also:
 - history and charts for a chosen period;

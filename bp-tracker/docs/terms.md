@@ -22,7 +22,7 @@
 
 ## 4. Бесплатные и платные функции
 
-Бесплатно доступны ввод и просмотр записей, история и среднее значение за неделю. Функции Pro (PDF-отчёт для врача, резервная копия, журнал приёма лекарств, синхронизация с Health Connect) доступны по подписке.
+Бесплатно доступны ввод и просмотр записей, история, графики, экспорт CSV, список лекарств и напоминания для одного лекарства. Функции Pro (PDF-отчёт для врача, резервная копия, журнал приёма лекарств, напоминания для всех лекарств, синхронизация с Health Connect) доступны по подписке.
 
 ## 5. Подписка Pro
 
@@ -62,7 +62,7 @@
 
 **Accuracy.** You are responsible for the values you enter and for your measuring device. The app only checks ranges and format.
 
-**Free and Pro.** Entry, viewing, history and the 7-day average are free. Pro features (doctor PDF report, backup, medicine intake log, Health Connect sync) require a subscription.
+**Free and Pro.** Entry, viewing, history, charts, CSV export, the medicine list and reminders for one medicine are free. Pro features (doctor PDF report, backup, medicine intake log, reminders for all medicines, Health Connect sync) require a subscription.
 
 **Subscription.** Purchases are made through the App Store or Google Play and charged to your store account. Price and period are shown before purchase: [PRICE AND PERIOD]. Subscriptions renew automatically until cancelled in your store account settings at least 24 hours before the period ends. Refunds follow store policy. Use "Restore purchase" in the app on a new device.
 

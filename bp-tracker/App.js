@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   ScrollView,
-  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -16,9 +15,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import * as HealthConnect from 'react-native-health-connect';
+import * as Notifications from 'expo-notifications';
+import * as DocumentPicker from 'expo-document-picker';
+import { File, Paths } from 'expo-file-system';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import { classify, parseTakenAt } from './src/bp.mjs';
+import { classify, parseTakenAt, formatTakenAt } from './src/bp.mjs';
 import {
   TYPES,
   GLUCOSE_CONTEXTS,
@@ -30,13 +32,16 @@ import {
   ofType,
   sortNewestFirst,
   toCsvRecords,
+  toInputUnits,
 } from './src/measurements.mjs';
 import { validateMed, makeMed } from './src/meds.mjs';
 import { PRO_FEATURES, isUnlocked } from './src/entitlements.mjs';
-import { INTAKE_STATUS, setIntake, statusFor, dateKey } from './src/intake.mjs';
+import { INTAKE_STATUS, toggleIntake, statusFor, dateKey } from './src/intake.mjs';
 import { buildBackup, parseBackup } from './src/backup.mjs';
 import { buildReportHtml } from './src/report.mjs';
-import { toHealthRecord, pendingRecords, WRITE_PERMISSIONS } from './src/healthSync.mjs';
+import { toHealthRecord, pendingRecords, healthTypeFor, WRITE_PERMISSIONS } from './src/healthSync.mjs';
+import { canAddReminder, reminderSlots } from './src/reminders.mjs';
+import { chartPoints, scaleRange } from './src/chart.mjs';
 import { translate, localeTag, detectLanguage, LANGUAGES } from './src/i18n.mjs';
 
 const RECORDS_KEY = 'health-records-v2';
@@ -47,6 +52,7 @@ const MEDS_KEY = 'meds-v1';
 const PRO_KEY = 'pro-v1';
 const INTAKE_KEY = 'intake-v1';
 const HC_SYNCED_KEY = 'hc-synced-v1';
+const REMINDER_CHANNEL = 'medicine';
 const DAY = 24 * 60 * 60 * 1000;
 const CHART_POINTS = 30;
 const CHART_MIN = 40;
@@ -71,6 +77,11 @@ const TEST_PRO_BUILD = process.env.EXPO_PUBLIC_TEST_PRO === '1';
 const SHOW_TEST_PRO = __DEV__ || TEST_PRO_BUILD;
 const SHADOW = 6;
 
+// Показ напоминаний на экране и в шторке, когда приложение открыто.
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false }),
+});
+
 const TABS = [
   { key: 'input', label: 'tabInput', icon: 'add-circle-outline' },
   { key: 'history', label: 'tabHistory', icon: 'list-outline' },
@@ -88,6 +99,7 @@ export default function App() {
   const [tab, setTab] = useState('input');
   const [type, setType] = useState(TYPES.bp);
   const [historyFilter, setHistoryFilter] = useState('all');
+  const [chartType, setChartType] = useState(TYPES.bp);
   const [records, setRecords] = useState([]);
   const [meds, setMeds] = useState([]);
   const [units, setUnits] = useState({ glucose: 'mmol', weight: 'kg' });
@@ -100,14 +112,15 @@ export default function App() {
   const [context, setContext] = useState('fasting');
   const [when, setWhen] = useState('');
   const [error, setError] = useState(null);
+  const [editingId, setEditingId] = useState(null);
 
   const [medName, setMedName] = useState('');
   const [medTimes, setMedTimes] = useState('');
   const [medError, setMedError] = useState(null);
+  const [editingMedId, setEditingMedId] = useState(null);
   const [isPro, setIsPro] = useState(false);
   const [intake, setIntakeList] = useState([]);
   const [reportDays, setReportDays] = useState(30);
-  const [restoreText, setRestoreText] = useState('');
   const [hcSynced, setHcSynced] = useState([]);
   const [hcReady, setHcReady] = useState(false);
 
@@ -162,8 +175,34 @@ export default function App() {
     AsyncStorage.setItem(HC_SYNCED_KEY, JSON.stringify(hcSynced)).catch(() => {});
   }, [hcSynced]);
 
+  // Health Connect есть только на Android. Если разрешение уже выдано, сразу показываем «Синхронизировать».
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    (async () => {
+      const ok = await HealthConnect.initialize();
+      if (!ok) return;
+      const granted = await HealthConnect.getGrantedPermissions();
+      setHcReady(granted.some((p) => p.accessType === 'write'));
+    })().catch(() => {});
+  }, []);
+
+  // Канал уведомлений на Android. Название берём на текущем языке.
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    Notifications.setNotificationChannelAsync(REMINDER_CHANNEL, {
+      name: translate(lang, 'reminderChannel'),
+      importance: Notifications.AndroidImportance.HIGH,
+    }).catch(() => {});
+  }, [lang]);
+
+  // Напоминания пересоздаются при каждом изменении списка лекарств.
+  useEffect(() => {
+    if (!loaded) return;
+    scheduleReminders(meds, (key, vars) => translate(lang, key, vars)).catch(() => {});
+  }, [meds, loaded, lang]);
+
   async function hcConnect() {
-    if (Platform.OS !== 'android') return Alert.alert(tr('hcTitle'), tr('hcIosLater'));
+    if (Platform.OS !== 'android') return;
     try {
       const ok = await HealthConnect.initialize();
       if (!ok) return Alert.alert(tr('hcTitle'), tr('hcUnavailable'));
@@ -211,7 +250,7 @@ export default function App() {
   }
 
   function markIntake(medId, time, status) {
-    setIntakeList((prev) => setIntake(prev, { medId, date: dateKey(Date.now()), time, status }));
+    setIntakeList((prev) => toggleIntake(prev, { medId, date: dateKey(Date.now()), time, status }));
   }
 
   async function makeReport() {
@@ -228,35 +267,58 @@ export default function App() {
     });
     try {
       const { uri } = await Print.printToFileAsync({ html });
-      await Sharing.shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf' });
+      await Sharing.shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle: tr('reportTitle') });
     } catch (e) {
       Alert.alert(tr('reportMake'), String(e.message ?? e));
     }
   }
 
-  function exportBackup() {
-    const text = buildBackup({ records, meds, intake, units });
-    Share.share({ title: tr('backupTitle'), message: text });
+  async function exportCsv() {
+    try {
+      // BOM нужен, чтобы Excel правильно открыл кириллицу.
+      const csv = '﻿' + toCsvRecords(records, lang, units, classify);
+      await shareFile(`diary-${dateKey(Date.now())}.csv`, csv, 'text/csv', 'public.comma-separated-values-text', tr('shareTitle'));
+    } catch (e) {
+      Alert.alert(tr('exportTitle'), String(e.message ?? e));
+    }
   }
 
-  function restoreBackup() {
-    const check = parseBackup(restoreText);
-    if (check.error) return Alert.alert(tr('backupTitle'), tr(check.error));
-    Alert.alert(tr('backupTitle'), tr('backupReplaceWarn'), [
-      { text: tr('cancel'), style: 'cancel' },
-      {
-        text: tr('backupRestore'),
-        style: 'destructive',
-        onPress: () => {
-          setRecords(check.data.records);
-          setMeds(check.data.meds);
-          setIntakeList(check.data.intake);
-          if (check.data.units && check.data.units.glucose) changeUnits(check.data.units);
-          setRestoreText('');
-          Alert.alert(tr('backupTitle'), tr('backupDone'));
+  async function exportBackup() {
+    try {
+      const text = buildBackup({ records, meds, intake, units });
+      await shareFile(`health-diary-backup-${dateKey(Date.now())}.json`, text, 'application/json', 'public.json', tr('backupTitle'));
+    } catch (e) {
+      Alert.alert(tr('backupTitle'), String(e.message ?? e));
+    }
+  }
+
+  async function pickBackup() {
+    try {
+      const res = await DocumentPicker.getDocumentAsync({
+        type: ['application/json', 'text/plain', 'application/octet-stream'],
+        copyToCacheDirectory: true,
+      });
+      if (res.canceled) return;
+      const text = await new File(res.assets[0].uri).text();
+      const check = parseBackup(text);
+      if (check.error) return Alert.alert(tr('backupTitle'), tr(check.error));
+      Alert.alert(tr('backupTitle'), tr('backupReplaceWarn'), [
+        { text: tr('cancel'), style: 'cancel' },
+        {
+          text: tr('backupRestore'),
+          style: 'destructive',
+          onPress: () => {
+            setRecords(check.data.records);
+            setMeds(check.data.meds);
+            setIntakeList(check.data.intake);
+            if (check.data.units && check.data.units.glucose) changeUnits(check.data.units);
+            Alert.alert(tr('backupTitle'), tr('backupDone'));
+          },
         },
-      },
-    ]);
+      ]);
+    } catch (e) {
+      Alert.alert(tr('backupTitle'), tr('backupBadFile'));
+    }
   }
 
   function switchLanguage(next) {
@@ -273,58 +335,146 @@ export default function App() {
   const sorted = useMemo(() => sortNewestFirst(records), [records]);
   const shown = historyFilter === 'all' ? sorted : sorted.filter((r) => r.type === historyFilter);
 
-  function save() {
-    const input = type === TYPES.bp ? { systolic, diastolic, pulse } : { value, context };
-    const check = validateMeasurement(type, input, units);
-    if (check.error) return setError(tr(check.error));
-    const date = parseTakenAt(when);
-    if (date.error) return setError(tr(date.error));
-    setError(null);
-    setRecords((prev) => [makeRecord(type, check.values, date.takenAt), ...prev]);
+  function clearForm() {
     setSystolic('');
     setDiastolic('');
     setPulse('');
     setValue('');
     setWhen('');
+    setError(null);
+  }
+
+  function startEdit(r) {
+    setEditingId(r.id);
+    setType(r.type);
+    setError(null);
+    setWhen(formatTakenAt(r.takenAt));
+    if (r.type === TYPES.bp) {
+      setSystolic(String(r.values.systolic));
+      setDiastolic(String(r.values.diastolic));
+      setPulse(r.values.pulse ? String(r.values.pulse) : '');
+    } else if (r.type === TYPES.glucose) {
+      setValue(String(toInputUnits(TYPES.glucose, r.values.value, units.glucose)));
+      setContext(r.values.context);
+    } else {
+      setValue(String(toInputUnits(TYPES.weight, r.values.value, units.weight)));
+    }
+    setTab('input');
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    clearForm();
+  }
+
+  function save() {
+    // При правке тип записи не меняется: форма открыта для того же вида измерения.
+    const editing = editingId ? records.find((r) => r.id === editingId) : null;
+    const useType = editing ? editing.type : type;
+    const input = useType === TYPES.bp ? { systolic, diastolic, pulse } : { value, context };
+    const check = validateMeasurement(useType, input, units);
+    if (check.error) return setError(tr(check.error));
+    const date = parseTakenAt(when);
+    if (date.error) return setError(tr(date.error));
+    if (editing) {
+      // Версия растёт: при синхронизации Health Connect заменит старую запись, а не добавит дубль.
+      setRecords((prev) => prev.map((r) => (r.id === editing.id ? { ...r, values: check.values, takenAt: date.takenAt, version: (r.version ?? 1) + 1 } : r)));
+      setHcSynced((prev) => prev.filter((id) => id !== editing.id));
+      setEditingId(null);
+    } else {
+      setRecords((prev) => [makeRecord(useType, check.values, date.takenAt), ...prev]);
+    }
+    clearForm();
     Vibration.vibrate(15);
   }
 
-  function remove(id) {
+  function remove(record) {
     Alert.alert(tr('deleteTitle'), '', [
       { text: tr('cancel'), style: 'cancel' },
-      { text: tr('delete'), style: 'destructive', onPress: () => setRecords((prev) => prev.filter((r) => r.id !== id)) },
+      { text: tr('delete'), style: 'destructive', onPress: () => deleteRecord(record) },
     ]);
   }
 
-  function addMed() {
+  async function deleteRecord(record) {
+    setRecords((prev) => prev.filter((r) => r.id !== record.id));
+    if (editingId === record.id) cancelEdit();
+    if (!hcSynced.includes(record.id)) return;
+    setHcSynced((prev) => prev.filter((id) => id !== record.id));
+    if (Platform.OS !== 'android') return;
+    try {
+      await HealthConnect.deleteRecordsByUuids(healthTypeFor(record.type), [], [record.id]);
+    } catch (e) {
+      Alert.alert(tr('hcTitle'), tr('hcDeleteFailed'));
+    }
+  }
+
+  async function addMed() {
     const check = validateMed({ name: medName, times: medTimes });
     if (check.error) return setMedError(tr(check.error));
+    const others = meds.filter((m) => m.id !== editingMedId);
+    if (check.times.length > 0 && !canAddReminder(others, isPro)) return setMedError(tr('remindersLimit'));
     setMedError(null);
-    setMeds((prev) => [makeMed({ name: check.name, times: check.times }), ...prev]);
+    if (check.times.length > 0 && !(await ensureNotifications())) {
+      Alert.alert(tr('reminderChannel'), tr('reminderDenied'));
+    }
+    if (editingMedId) {
+      setMeds((prev) => prev.map((m) => (m.id === editingMedId ? { ...m, name: check.name, times: check.times } : m)));
+      setEditingMedId(null);
+    } else {
+      setMeds((prev) => [makeMed({ name: check.name, times: check.times }), ...prev]);
+    }
     setMedName('');
     setMedTimes('');
+  }
+
+  function startEditMed(m) {
+    setEditingMedId(m.id);
+    setMedName(m.name);
+    setMedTimes(m.times.join(', '));
+    setMedError(null);
+  }
+
+  function cancelEditMed() {
+    setEditingMedId(null);
+    setMedName('');
+    setMedTimes('');
+    setMedError(null);
   }
 
   function removeMed(id) {
     Alert.alert(tr('medDelete') + '?', '', [
       { text: tr('cancel'), style: 'cancel' },
-      { text: tr('delete'), style: 'destructive', onPress: () => setMeds((prev) => prev.filter((m) => m.id !== id)) },
+      {
+        text: tr('delete'),
+        style: 'destructive',
+        onPress: () => {
+          setMeds((prev) => prev.filter((m) => m.id !== id));
+          if (editingMedId === id) cancelEditMed();
+        },
+      },
     ]);
   }
 
   const catLabel = (cat) => tr(`cat_${cat}`);
   const formatDate = (ms) => new Date(ms).toLocaleString(localeTag(lang));
   const typeLabel = (k) => tr(`type_${k}`);
+  const editingRecord = editingId ? records.find((r) => r.id === editingId) : null;
 
   return (
     <View style={[styles.root, { backgroundColor: t.bg }]}>
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
-          <Text style={[styles.title, { color: t.text }]}>{tr('appTitle')}</Text>
+          <Text style={[styles.title, { color: t.text }]} accessibilityRole="header">{tr('appTitle')}</Text>
           <View style={[styles.langSwitch, { borderColor: t.border }]}>
             {LANGUAGES.map((code) => (
-              <TouchableOpacity key={code} onPress={() => switchLanguage(code)} style={[styles.langBtn, lang === code && { backgroundColor: t.accent }]}>
+              <TouchableOpacity
+                key={code}
+                onPress={() => switchLanguage(code)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: lang === code }}
+                style={[styles.langBtn, lang === code && { backgroundColor: t.accent }]}
+              >
                 <Text style={[styles.langText, { color: lang === code ? '#fff' : t.muted }]}>{code.toUpperCase()}</Text>
               </TouchableOpacity>
             ))}
@@ -333,15 +483,17 @@ export default function App() {
 
         {tab === 'input' && (
           <>
-            <Chips
-              t={t}
-              items={Object.values(TYPES).map((k) => ({ key: k, label: typeLabel(k), icon: TYPE_ICONS[k] }))}
-              active={type}
-              onPick={setType}
-            />
+            {!editingId ? (
+              <Chips
+                t={t}
+                items={Object.values(TYPES).map((k) => ({ key: k, label: typeLabel(k), icon: TYPE_ICONS[k] }))}
+                active={type}
+                onPick={setType}
+              />
+            ) : null}
             <Hero type={type} records={records} t={t} tr={tr} catLabel={catLabel} units={units} lang={lang} fmt={formatDate} />
             <Card t={t}>
-              <Text style={[styles.h2, { color: t.text }]}>{typeLabel(type)}</Text>
+              <Text style={[styles.h2, { color: t.text }]}>{editingRecord ? tr('editTitle') : typeLabel(type)}</Text>
               {type === TYPES.bp ? (
                 <View style={styles.row}>
                   <Field label={tr('systolic')} t={t} value={systolic} onChange={setSystolic} />
@@ -385,11 +537,16 @@ export default function App() {
                 </>
               )}
               <Field label={tr('dateLabel')} t={t} value={when} onChange={setWhen} placeholder="05.10.2026 08:30" text />
-              {error ? <Text style={styles.error}>{error}</Text> : null}
-              <TouchableOpacity style={[styles.button, { backgroundColor: t.accent }]} onPress={save}>
+              {error ? <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text> : null}
+              <TouchableOpacity style={[styles.button, { backgroundColor: t.accent }]} onPress={save} accessibilityRole="button">
                 <Ionicons name="checkmark-circle" size={20} color="#fff" />
                 <Text style={styles.buttonText}>{tr('save')}</Text>
               </TouchableOpacity>
+              {editingRecord ? (
+                <TouchableOpacity style={[styles.button, { backgroundColor: t.muted }]} onPress={cancelEdit} accessibilityRole="button">
+                  <Text style={styles.buttonText}>{tr('editCancel')}</Text>
+                </TouchableOpacity>
+              ) : null}
             </Card>
             <Text style={[styles.disclaimer, { color: t.muted }]}>{tr('disclaimer')}</Text>
           </>
@@ -415,7 +572,14 @@ export default function App() {
                   const cat = r.type === TYPES.bp ? classify(r.values.systolic, r.values.diastolic) : null;
                   const color = cat ? CATEGORY_COLORS[cat] : t.accent;
                   return (
-                    <TouchableOpacity key={r.id} style={[styles.item, { borderTopColor: t.border }]} onLongPress={() => remove(r.id)}>
+                    <TouchableOpacity
+                      key={r.id}
+                      style={[styles.item, { borderTopColor: t.border }]}
+                      onPress={() => startEdit(r)}
+                      onLongPress={() => remove(r)}
+                      accessibilityRole="button"
+                      accessibilityHint={tr('editHint')}
+                    >
                       <Ionicons name={TYPE_ICONS[r.type]} size={22} color={color} />
                       <View style={{ flex: 1 }}>
                         <Text style={[styles.itemMain, { color: t.text }]}>
@@ -440,7 +604,8 @@ export default function App() {
               <TouchableOpacity
                 style={[styles.button, { backgroundColor: records.length ? t.accent : t.muted }]}
                 disabled={records.length === 0}
-                onPress={() => Share.share({ title: tr('shareTitle'), message: toCsvRecords(records, lang, units, classify) })}
+                onPress={exportCsv}
+                accessibilityRole="button"
               >
                 <Ionicons name="share-outline" size={20} color="#fff" />
                 <Text style={styles.buttonText}>{tr('share')}</Text>
@@ -452,48 +617,41 @@ export default function App() {
                 <ProBadge tr={tr} />
               </View>
               <Text style={[styles.muted, { color: t.muted }]}>{tr('backupHint')}</Text>
-              <TouchableOpacity style={[styles.button, { backgroundColor: t.accent }]} onPress={() => gated(PRO_FEATURES.backup, exportBackup)}>
+              <TouchableOpacity style={[styles.button, { backgroundColor: t.accent }]} onPress={() => gated(PRO_FEATURES.backup, exportBackup)} accessibilityRole="button">
                 <Ionicons name="cloud-download-outline" size={20} color="#fff" />
                 <Text style={styles.buttonText}>{tr('backupExport')}</Text>
               </TouchableOpacity>
-              <TextInput
-                style={[styles.input, { color: t.text, backgroundColor: t.inputBg, borderColor: t.border, minHeight: 60 }]}
-                value={restoreText}
-                onChangeText={setRestoreText}
-                placeholder={tr('backupPasteHint')}
-                placeholderTextColor={t.muted}
-                multiline
-                autoCapitalize="none"
-              />
-              <TouchableOpacity style={[styles.button, { backgroundColor: restoreText ? t.accent : t.muted }]} disabled={!restoreText} onPress={() => gated(PRO_FEATURES.backup, restoreBackup)}>
+              <TouchableOpacity style={[styles.button, { backgroundColor: t.accent }]} onPress={() => gated(PRO_FEATURES.backup, pickBackup)} accessibilityRole="button">
                 <Ionicons name="cloud-upload-outline" size={20} color="#fff" />
-                <Text style={styles.buttonText}>{tr('backupRestore')}</Text>
+                <Text style={styles.buttonText}>{tr('backupPick')}</Text>
               </TouchableOpacity>
             </Card>
-            <Card t={t}>
-              <View style={styles.titleRow}>
-                <Text style={[styles.h2, { color: t.text }]}>{tr('hcTitle')}</Text>
-                <ProBadge tr={tr} />
-              </View>
-              <Text style={[styles.muted, { color: t.muted }]}>{tr('hcHint')}</Text>
-              <Text style={[styles.muted, { color: t.muted, fontSize: 12 }]}>{tr('hcCount', { n: hcSynced.length })}</Text>
-              <TouchableOpacity style={[styles.button, { backgroundColor: t.accent }]} onPress={() => gated(PRO_FEATURES.healthSync, hcReady ? hcSync : hcConnect)}>
-                <Ionicons name="heart-circle-outline" size={20} color="#fff" />
-                <Text style={styles.buttonText}>{hcReady ? tr('hcSync') : tr('hcConnect')}</Text>
-              </TouchableOpacity>
-            </Card>
+            {Platform.OS === 'android' ? (
+              <Card t={t}>
+                <View style={styles.titleRow}>
+                  <Text style={[styles.h2, { color: t.text }]}>{tr('hcTitle')}</Text>
+                  <ProBadge tr={tr} />
+                </View>
+                <Text style={[styles.muted, { color: t.muted }]}>{tr('hcHint')}</Text>
+                <Text style={[styles.muted, { color: t.muted, fontSize: 12 }]}>{tr('hcCount', { n: hcSynced.length })}</Text>
+                <TouchableOpacity style={[styles.button, { backgroundColor: t.accent }]} onPress={() => gated(PRO_FEATURES.healthSync, hcReady ? hcSync : hcConnect)} accessibilityRole="button">
+                  <Ionicons name="heart-circle-outline" size={20} color="#fff" />
+                  <Text style={styles.buttonText}>{hcReady ? tr('hcSync') : tr('hcConnect')}</Text>
+                </TouchableOpacity>
+              </Card>
+            ) : null}
             <Card t={t}>
               <Text style={[styles.h2, { color: t.text }]}>{tr('subscribeTitle')}</Text>
               <Text style={[styles.muted, { color: t.muted }]}>{tr('subscribeIncludes')}</Text>
               <Text style={[styles.muted, { color: t.muted, fontSize: 12 }]}>{tr('subscribeTerms')}</Text>
-              <TouchableOpacity style={[styles.button, { backgroundColor: t.accent }]} onPress={() => Alert.alert(tr('subscribeTitle'), tr('subscribeNotReady'))}>
+              <TouchableOpacity style={[styles.button, { backgroundColor: t.accent }]} onPress={() => Alert.alert(tr('subscribeTitle'), tr('subscribeNotReady'))} accessibilityRole="button">
                 <Text style={styles.buttonText}>{tr('subscribeButton')}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.button, { backgroundColor: t.muted }]} onPress={() => Alert.alert(tr('restorePurchases'), tr('subscribeNotReady'))}>
+              <TouchableOpacity style={[styles.button, { backgroundColor: t.muted }]} onPress={() => Alert.alert(tr('restorePurchases'), tr('subscribeNotReady'))} accessibilityRole="button">
                 <Text style={styles.buttonText}>{tr('restorePurchases')}</Text>
               </TouchableOpacity>
               {SHOW_TEST_PRO ? (
-                <TouchableOpacity style={[styles.button, { backgroundColor: '#78716c' }]} onPress={toggleTestPro}>
+                <TouchableOpacity style={[styles.button, { backgroundColor: '#78716c' }]} onPress={toggleTestPro} accessibilityRole="button">
                   <Text style={styles.buttonText}>{`${isPro ? tr('proTestLock') : tr('proTestUnlock')} (${tr('proDevOnly')})`}</Text>
                 </TouchableOpacity>
               ) : null}
@@ -503,7 +661,14 @@ export default function App() {
 
         {tab === 'charts' && (
           <>
-            <Chart readings={ofType(records, TYPES.bp)} t={t} tr={tr} catLabel={catLabel} />
+            <Chips
+              t={t}
+              small
+              items={Object.values(TYPES).map((k) => ({ key: k, label: typeLabel(k), icon: TYPE_ICONS[k] }))}
+              active={chartType}
+              onPick={setChartType}
+            />
+            <Chart type={chartType} records={records} units={units} t={t} tr={tr} catLabel={catLabel} lang={lang} />
             <Card t={t}>
               <View style={styles.titleRow}>
                 <Text style={[styles.h2, { color: t.text }]}>{tr('reportTitle')}</Text>
@@ -521,7 +686,7 @@ export default function App() {
                 active={reportDays}
                 onPick={setReportDays}
               />
-              <TouchableOpacity style={[styles.button, { backgroundColor: t.accent }]} onPress={() => gated(PRO_FEATURES.pdfReport, makeReport)}>
+              <TouchableOpacity style={[styles.button, { backgroundColor: t.accent }]} onPress={() => gated(PRO_FEATURES.pdfReport, makeReport)} accessibilityRole="button">
                 <Ionicons name="document-text-outline" size={20} color="#fff" />
                 <Text style={styles.buttonText}>{tr('reportMake')}</Text>
               </TouchableOpacity>
@@ -549,10 +714,20 @@ export default function App() {
                           {status === 'taken' ? tr('intakeTaken') : status === 'missed' ? tr('intakeMissed') : tr('intakeNone')}
                         </Text>
                       </View>
-                      <TouchableOpacity style={[styles.chip, { borderColor: t.border, backgroundColor: status === 'taken' ? '#22c55e' : t.card }]} onPress={() => markIntake(m.id, time, INTAKE_STATUS.TAKEN)}>
+                      <TouchableOpacity
+                        style={[styles.chip, { borderColor: t.border, backgroundColor: status === 'taken' ? '#22c55e' : t.card }]}
+                        onPress={() => markIntake(m.id, time, INTAKE_STATUS.TAKEN)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: status === 'taken' }}
+                      >
                         <Text style={[styles.chipText, { color: status === 'taken' ? '#fff' : t.text }]}>{tr('intakeTaken')}</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity style={[styles.chip, { borderColor: t.border, backgroundColor: status === 'missed' ? '#ef4444' : t.card }]} onPress={() => markIntake(m.id, time, INTAKE_STATUS.MISSED)}>
+                      <TouchableOpacity
+                        style={[styles.chip, { borderColor: t.border, backgroundColor: status === 'missed' ? '#ef4444' : t.card }]}
+                        onPress={() => markIntake(m.id, time, INTAKE_STATUS.MISSED)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: status === 'missed' }}
+                      >
                         <Text style={[styles.chipText, { color: status === 'missed' ? '#fff' : t.text }]}>{tr('intakeMissed')}</Text>
                       </TouchableOpacity>
                     </View>
@@ -561,26 +736,38 @@ export default function App() {
               )}
             </Card>
             <Card t={t}>
-              <Text style={[styles.h2, { color: t.text }]}>{tr('medsTitle')}</Text>
+              <Text style={[styles.h2, { color: t.text }]}>{editingMedId ? tr('medEditTitle') : tr('medsTitle')}</Text>
               <Text style={[styles.muted, { color: t.muted }]}>{tr('medsHint')}</Text>
               <Field label={tr('medName')} t={t} value={medName} onChange={setMedName} text />
               <Field label={tr('medTimes')} t={t} value={medTimes} onChange={setMedTimes} placeholder="08:00, 20:00" text />
-              {medError ? <Text style={styles.error}>{medError}</Text> : null}
-              <TouchableOpacity style={[styles.button, { backgroundColor: t.accent }]} onPress={addMed}>
-                <Ionicons name="add-circle-outline" size={20} color="#fff" />
-                <Text style={styles.buttonText}>{tr('medAdd')}</Text>
+              {medError ? <Text style={styles.error} accessibilityLiveRegion="polite">{medError}</Text> : null}
+              <TouchableOpacity style={[styles.button, { backgroundColor: t.accent }]} onPress={addMed} accessibilityRole="button">
+                <Ionicons name={editingMedId ? 'checkmark-circle' : 'add-circle-outline'} size={20} color="#fff" />
+                <Text style={styles.buttonText}>{editingMedId ? tr('save') : tr('medAdd')}</Text>
               </TouchableOpacity>
+              {editingMedId ? (
+                <TouchableOpacity style={[styles.button, { backgroundColor: t.muted }]} onPress={cancelEditMed} accessibilityRole="button">
+                  <Text style={styles.buttonText}>{tr('editCancel')}</Text>
+                </TouchableOpacity>
+              ) : null}
             </Card>
             <Card t={t}>
               {meds.length === 0 ? (
                 <Text style={[styles.muted, { color: t.muted }]}>{tr('medEmpty')}</Text>
               ) : (
                 meds.map((m) => (
-                  <TouchableOpacity key={m.id} style={[styles.item, { borderTopColor: t.border }]} onLongPress={() => removeMed(m.id)}>
+                  <TouchableOpacity
+                    key={m.id}
+                    style={[styles.item, { borderTopColor: t.border }]}
+                    onPress={() => startEditMed(m)}
+                    onLongPress={() => removeMed(m.id)}
+                    accessibilityRole="button"
+                    accessibilityHint={tr('editHint')}
+                  >
                     <Ionicons name="medkit-outline" size={22} color={t.accent} />
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.itemMain, { color: t.text }]}>{m.name}</Text>
-                      <Text style={[styles.muted, { color: t.muted }]}>{m.times.join(', ')}</Text>
+                      <Text style={[styles.muted, { color: t.muted }]}>{m.times.length ? m.times.join(', ') : tr('medNoTimes')}</Text>
                     </View>
                   </TouchableOpacity>
                 ))
@@ -596,7 +783,13 @@ export default function App() {
           const active = tab === item.key;
           const color = active ? t.accent : t.muted;
           return (
-            <TouchableOpacity key={item.key} style={styles.tabItem} onPress={() => setTab(item.key)}>
+            <TouchableOpacity
+              key={item.key}
+              style={styles.tabItem}
+              onPress={() => setTab(item.key)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+            >
               <Ionicons name={item.icon} size={22} color={color} />
               <Text style={[styles.tabLabel, { color }]}>{tr(item.label)}</Text>
             </TouchableOpacity>
@@ -607,12 +800,47 @@ export default function App() {
   );
 }
 
+// Файл во временной папке и системное окно «Поделиться». Старый файл с тем же именем заменяется.
+async function shareFile(name, text, mimeType, uti, dialogTitle) {
+  const file = new File(Paths.cache, name);
+  if (file.exists) file.delete();
+  file.create();
+  file.write(text);
+  await Sharing.shareAsync(file.uri, { mimeType, UTI: uti, dialogTitle });
+}
+
+async function ensureNotifications() {
+  const current = await Notifications.getPermissionsAsync();
+  if (current.granted) return true;
+  const asked = await Notifications.requestPermissionsAsync();
+  return Boolean(asked.granted);
+}
+
+// Пересоздаём все напоминания по расписанию. Без разрешения ничего не ставим.
+async function scheduleReminders(meds, tr) {
+  const current = await Notifications.getPermissionsAsync();
+  await Notifications.cancelAllScheduledNotificationsAsync();
+  if (!current.granted) return;
+  for (const slot of reminderSlots(meds)) {
+    await Notifications.scheduleNotificationAsync({
+      identifier: slot.key,
+      content: { title: tr('reminderTitle'), body: tr('reminderBody', { name: slot.name, time: slot.time }) },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DAILY,
+        hour: slot.hour,
+        minute: slot.minute,
+        channelId: REMINDER_CHANNEL,
+      },
+    });
+  }
+}
+
 function glucoseWeekAverage(records, units, lang) {
   const since = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const recent = ofType(records, TYPES.glucose).filter((r) => r.takenAt >= since);
   if (recent.length === 0) return '—';
   const avg = recent.reduce((a, r) => a + r.values.value, 0) / recent.length;
-  const shown = units.glucose === 'mgdl' ? Math.round(avg * 18.0156) : avg.toFixed(1);
+  const shown = units.glucose === 'mgdl' ? Math.round(toInputUnits(TYPES.glucose, avg, 'mgdl')) : avg.toFixed(1);
   return `${shown} ${unitLabel(TYPES.glucose, units, lang)}`;
 }
 
@@ -661,6 +889,8 @@ function Chips({ items, active, onPick, t, small }) {
           <TouchableOpacity
             key={it.key}
             onPress={() => onPick(it.key)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: on }}
             style={[styles.chip, small && styles.chipSmall, { borderColor: t.border, backgroundColor: on ? '#FFE600' : t.card }]}
           >
             {it.icon ? <Ionicons name={it.icon} size={16} color="#000" /> : null}
@@ -684,6 +914,7 @@ function Field({ label, t, value, onChange, placeholder, text }) {
         placeholderTextColor={t.muted}
         keyboardType={text ? 'default' : 'decimal-pad'}
         autoCapitalize="none"
+        accessibilityLabel={label}
       />
     </View>
   );
@@ -707,9 +938,10 @@ function Card({ children, t }) {
   );
 }
 
-// Столбик на каждое давление: от нижнего до верхнего. Цвет — категория.
-function Chart({ readings, t, tr, catLabel }) {
-  const points = useMemo(() => [...readings].sort((a, b) => a.takenAt - b.takenAt).slice(-CHART_POINTS), [readings]);
+// График по выбранному виду измерения. Давление — столбики «нижнее–верхнее» по категориям.
+// Сахар и вес — столбики от минимума шкалы до значения.
+function Chart({ type, records, units, t, tr, catLabel, lang }) {
+  const points = useMemo(() => chartPoints(records, type, CHART_POINTS), [records, type]);
   if (points.length === 0) {
     return (
       <Card t={t}>
@@ -720,41 +952,55 @@ function Chart({ readings, t, tr, catLabel }) {
       </Card>
     );
   }
+  const isBp = type === TYPES.bp;
+  const { min, max } = scaleRange(points, isBp ? { min: CHART_MIN, max: CHART_MAX } : null);
   const scale = (v) => {
-    const clamped = Math.min(CHART_MAX, Math.max(CHART_MIN, v));
-    return ((clamped - CHART_MIN) / (CHART_MAX - CHART_MIN)) * CHART_HEIGHT;
+    const clamped = Math.min(max, Math.max(min, v));
+    return ((clamped - min) / (max - min)) * CHART_HEIGHT;
   };
+  const unitKey = type === TYPES.glucose ? units.glucose : units.weight;
+  const shownValue = (v) => Math.round(toInputUnits(type, v, unitKey) * 10) / 10;
+  const lows = points.map((p) => p.low);
+  const highs = points.map((p) => p.high);
   return (
     <Card t={t}>
       <Text style={[styles.h2, { color: t.text }]}>{tr('chartTitle', { n: points.length })}</Text>
-      <Text style={[styles.muted, { color: t.muted }]}>{tr('chartHint')}</Text>
+      <Text style={[styles.muted, { color: t.muted }]}>{isBp ? tr('chartHint') : tr('chartHintSingle')}</Text>
       <View style={styles.chartWrap}>
-        {[140, 120].map((line) => (
-          <View key={line} style={[styles.refLine, { bottom: scale(line), borderColor: t.border }]}>
-            <Text style={[styles.refLabel, { color: t.muted }]}>{line}</Text>
-          </View>
-        ))}
+        {isBp
+          ? [140, 120].map((line) => (
+              <View key={line} style={[styles.refLine, { bottom: scale(line), borderColor: t.border }]}>
+                <Text style={[styles.refLabel, { color: t.muted }]}>{line}</Text>
+              </View>
+            ))
+          : null}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.bars}>
-          {points.map((r) => {
-            const cat = classify(r.values.systolic, r.values.diastolic);
-            const bottom = scale(r.values.diastolic);
-            const height = Math.max(4, scale(r.values.systolic) - bottom);
+          {points.map((p) => {
+            const bottom = isBp ? scale(p.low) : scale(min);
+            const height = Math.max(4, scale(p.high) - bottom);
+            const color = isBp ? CATEGORY_COLORS[classify(p.high, p.low)] : t.accent;
             return (
-              <View key={r.id} style={styles.barCol}>
-                <View style={[styles.bar, { bottom, height, backgroundColor: CATEGORY_COLORS[cat] }]} />
+              <View key={p.id} style={styles.barCol}>
+                <View style={[styles.bar, { bottom, height, backgroundColor: color }]} />
               </View>
             );
           })}
         </ScrollView>
       </View>
-      <View style={styles.legend}>
-        {Object.entries(CATEGORY_COLORS).map(([key, color]) => (
-          <View key={key} style={styles.legendItem}>
-            <View style={[styles.dot, { backgroundColor: color }]} />
-            <Text style={[styles.legendText, { color: t.muted }]}>{catLabel(key)}</Text>
-          </View>
-        ))}
-      </View>
+      {isBp ? (
+        <View style={styles.legend}>
+          {Object.entries(CATEGORY_COLORS).map(([key, color]) => (
+            <View key={key} style={styles.legendItem}>
+              <View style={[styles.dot, { backgroundColor: color }]} />
+              <Text style={[styles.legendText, { color: t.muted }]}>{catLabel(key)}</Text>
+            </View>
+          ))}
+        </View>
+      ) : (
+        <Text style={[styles.muted, { color: t.muted, fontSize: 13 }]}>
+          {tr('chartRange', { min: shownValue(Math.min(...lows)), max: shownValue(Math.max(...highs)), unit: unitLabel(type, units, lang) })}
+        </Text>
+      )}
     </Card>
   );
 }

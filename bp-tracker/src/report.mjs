@@ -1,6 +1,6 @@
 // HTML-отчёт для врача: период, средние, таблица измерений, приём лекарств. Без рекомендаций.
 import { TYPES, formatValue, unitLabel, sortNewestFirst } from './measurements.mjs';
-import { summary } from './intake.mjs';
+import { summary, dateKey } from './intake.mjs';
 import { translate } from './i18n.mjs';
 import { classify } from './bp.mjs';
 
@@ -19,8 +19,9 @@ export function buildReportHtml({ records, meds, intake, units = {}, lang = 'ru'
   const bp = inRange.filter((r) => r.type === TYPES.bp);
   const glucose = inRange.filter((r) => r.type === TYPES.glucose);
   const weight = inRange.filter((r) => r.type === TYPES.weight);
-  const fromKey = new Date(fromMs).toISOString().slice(0, 10);
-  const toKey = new Date(toMs).toISOString().slice(0, 10);
+  // Ключи дат в локальном времени, как у отметок приёма. Иначе в часовых поясах не UTC будет сдвиг на день.
+  const fromKey = dateKey(fromMs);
+  const toKey = dateKey(toMs);
 
   const bpAvg = bp.length
     ? `${Math.round(average(bp, (r) => r.values.systolic))}/${Math.round(average(bp, (r) => r.values.diastolic))}`
@@ -58,7 +59,7 @@ td,th{border-bottom:1px solid #e7e5e4;padding:6px;text-align:left}
 </style></head><body>
 <h1>${esc(t('appTitle'))}</h1>
 <p>${esc(dateFmt(fromMs))} — ${esc(dateFmt(toMs))}</p>
-<h2>${esc(t('weekAverage'))}</h2>
+<h2>${esc(t('reportAverage'))}</h2>
 <p>${esc(t('type_bp'))}: <b>${esc(bpAvg)}</b> ${esc(unitLabel(TYPES.bp, units, lang))} · ${esc(t('records'))}: ${bp.length}</p>
 <p>${esc(t('type_glucose'))}: ${glucose.length} · ${esc(t('type_weight'))}: ${weight.length}</p>
 <ul>${catRows}</ul>

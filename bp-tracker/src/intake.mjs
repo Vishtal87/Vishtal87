@@ -26,3 +26,11 @@ export function summary(list, medId, fromKey, toKey) {
   const missed = inRange.filter((r) => r.status === INTAKE_STATUS.MISSED).length;
   return { taken, missed, total: taken + missed };
 }
+
+// Повторное нажатие на ту же отметку снимает её. Другая отметка заменяет прежнюю.
+export function toggleIntake(list, { medId, date, time, status }, id) {
+  if (statusFor(list, medId, date, time) === status) {
+    return list.filter((r) => !(r.medId === medId && r.date === date && r.time === time));
+  }
+  return setIntake(list, { medId, date, time, status }, id);
+}
