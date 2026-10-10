@@ -44,6 +44,7 @@ import { buildBackup, parseBackup } from './src/backup.mjs';
 import { restoreFromBackup, undoRestore, STORAGE } from './src/restore.mjs';
 import { buildReportHtml } from './src/report.mjs';
 import { toHealthRecord, pendingRecords, healthTypeFor, fromHealthRecord, ALL_PERMISSIONS, READ_PERMISSIONS } from './src/healthSync.mjs';
+import { planImport, normalizeSeen } from './src/hcImport.mjs';
 import { canAddReminder, reminderSlots } from './src/reminders.mjs';
 import { DEVICE_KINDS } from './src/ble.mjs';
 import { ruStoreAvailable, ruStorePlans, ruStoreActive, ruStoreBuy, isRuStoreCancel } from './src/rustore.js';
@@ -335,18 +336,19 @@ export default function App() {
   }
 
   // Забираем давление, сахар и вес, которые записали другие приложения или приборы.
-  // Свои записи пропускаем (у них есть clientRecordId), уже импортированные помним по id.
+  // Правила дедупликации и повторной проверки — в src/hcImport.mjs.
   async function hcImport() {
     const granted = await HealthConnect.getGrantedPermissions();
     if (!granted.some((p) => p.accessType === 'read')) {
       await HealthConnect.requestPermission(READ_PERMISSIONS);
     }
+    const now = Date.now();
     const raw = await AsyncStorage.getItem(HC_IMPORT_KEY).catch(() => null);
     const state = raw ? JSON.parse(raw) : { done: false, seen: [] };
-    const seen = new Set(state.seen);
+    const seen = normalizeSeen(state.seen, now);
     // Первый импорт берёт 90 дней, дальше — последние 7: поздно синхронизированные измерения тоже попадут.
-    const since = new Date(Date.now() - (state.done ? 7 : 90) * DAY).toISOString();
-    const fresh = [];
+    const since = new Date(now - (state.done ? 7 : 90) * DAY).toISOString();
+    const incoming = [];
     for (const recordType of ['BloodPressure', 'BloodGlucose', 'Weight']) {
       let pageToken;
       do {
@@ -357,18 +359,17 @@ export default function App() {
         });
         for (const r of res.records) {
           const rec = fromHealthRecord({ ...r, recordType });
-          if (!rec || seen.has(rec.sourceId)) continue;
-          seen.add(rec.sourceId);
-          const check = validateMeasurement(rec.type, rec.input, { glucose: 'mmol', weight: 'kg' });
-          if (check.error) continue;
-          fresh.push({ ...makeRecord(rec.type, check.values, rec.takenAt), source: 'health' });
+          if (rec) incoming.push(rec);
         }
         pageToken = res.pageToken;
       } while (pageToken);
     }
-    await AsyncStorage.setItem(HC_IMPORT_KEY, JSON.stringify({ done: true, seen: [...seen] })).catch(() => {});
-    if (fresh.length) setRecords((prev) => [...fresh, ...prev]);
-    return fresh.length;
+    const plan = planImport({ incoming, records, seen, now });
+    // Сначала записи, потом список обработанных id: если сохранение прервётся, при повторе ручные записи
+    // защитят от дублей (сопоставление по времени и значению).
+    if (plan.added.length) setRecords((prev) => [...plan.added, ...prev]);
+    await AsyncStorage.setItem(HC_IMPORT_KEY, JSON.stringify({ done: true, seen: plan.seen })).catch(() => {});
+    return plan.counts.added;
   }
 
   // Записываем результат проверки магазина. 'unknown' (сеть или магазин недоступны) статус не меняет.

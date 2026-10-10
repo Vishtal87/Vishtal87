@@ -72,9 +72,10 @@ export const WRITE_PERMISSIONS = Object.freeze([
 ]);
 
 // Какие записи ещё не отправлены. Отправленные помечаем в списке id.
+// Записи, импортированные из Health Connect, назад не отправляем: там они уже есть.
 export function pendingRecords(records, syncedIds) {
   const done = new Set(syncedIds);
-  return records.filter((r) => !done.has(r.id) && toHealthRecord(r) !== null);
+  return records.filter((r) => !done.has(r.id) && r.source !== 'health' && toHealthRecord(r) !== null);
 }
 
 // Тип записи Health Connect для типа измерения. Нужен, чтобы удалить уже отправленную запись.
