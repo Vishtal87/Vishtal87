@@ -30,7 +30,7 @@
 
 ## 4. Покупки
 
-Подписка Pro оформляется через App Store или Google Play. Оплату, данные карты и платёжные реквизиты обрабатывает магазин приложений. Разработчик эти данные не видит.
+Подписка Pro оформляется через App Store или RuStore. Оплату, данные карты и платёжные реквизиты обрабатывает магазин приложений. Разработчик эти данные не видит.
 
 ## 5. Разрешения
 
@@ -71,7 +71,7 @@
 
 The app has no ads, no analytics, no tracking SDKs and does not share data with third parties.
 
-**Purchases.** Pro subscriptions are processed by the App Store or Google Play. The developer does not receive payment details.
+**Purchases.** Pro subscriptions are processed by the App Store or RuStore. The developer does not receive payment details.
 
 **Permissions.** Health Connect (optional, write-only), notifications (local medicine reminders, scheduled on the device only) and the system share and file picker. The app does not request contacts, camera, location or microphone access.
 

@@ -19,7 +19,9 @@
 2. **Данные разработчика.** Имя или название, контактный e-mail, дату вступления в силу, цену и срок Pro. Поля в квадратных скобках в `docs/privacy-policy.md`, `docs/terms.md`, `docs/store-listing.md`. Затем `python3 scripts/build-site.py`.
 3. **GitHub Pages.** В репозитории: Settings → Pages → Source: ветка с этим кодом, папка `/`. Ссылки появятся по адресам из `src/links.mjs`. Проверьте, что `privacy.html` открывается.
 4. **Аккаунт Expo.** `npx eas login`, затем `npx eas init` в папке `bp-tracker`. Команда запишет projectId в `app.json`.
-5. **Google Play Console** ($25 один раз). Создайте приложение с тем же идентификатором. Подписки: два продукта с идентификаторами `health_diary_pro_monthly` и `health_diary_pro_yearly`, у каждого базовый план с предложением по умолчанию.
+5. **Важно для России.** Google Play Billing для российских пользователей не работает: покупки и продления через Play не проходят. Поэтому Android-подписка в России делается через **RuStore** (RuStore Pay SDK), а не через Google Play. Нужен кабинет RuStore Console и подключение Pay SDK. Это отдельная работа в коде, её нельзя проверить без вашего кабинета.
+
+   Google Play Console ($25 один раз), если нужен выход вне России. Создайте приложение с тем же идентификатором. Подписки: два продукта с идентификаторами `health_diary_pro_monthly` и `health_diary_pro_yearly`, у каждого базовый план с предложением по умолчанию.
    - Личный аккаунт: перед продакшеном закрытое тестирование, 12 тестировщиков, 14 дней.
    - Первую сборку AAB загрузите вручную. Сборка: `npx eas build -p android --profile production`.
    - Для автоматической отправки: сервисный аккаунт Google, JSON-файл в `secrets/play-service-account.json` (папка в .gitignore), затем `npx eas submit -p android --latest`.

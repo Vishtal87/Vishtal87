@@ -26,9 +26,9 @@
 
 ## 5. Подписка Pro
 
-- Подписка оформляется через App Store или Google Play и оплачивается с вашего аккаунта там.
-- Цена и срок показываются перед покупкой: [ЦЕНА И ПЕРИОД].
-- Подписка продлевается автоматически, пока вы её не отмените. Отмена проводится в настройках App Store или Google Play не позднее чем за 24 часа до конца периода.
+- Подписка оформляется через App Store или RuStore и оплачивается с вашего аккаунта там.
+- Цена: 199 ₽ в месяц или 1 490 ₽ в год. Цена и срок показываются перед покупкой.
+- Подписка продлевается автоматически, пока вы её не отмените. Отмена проводится в настройках App Store или RuStore не позднее чем за 24 часа до конца периода.
 - Возврат средств регулируется правилами магазина приложений.
 - Восстановить покупку на новом устройстве можно кнопкой «Восстановить покупку» в приложении.
 
@@ -64,7 +64,7 @@
 
 **Free and Pro.** Entry, viewing, history, charts, CSV export, the medicine list and reminders for one medicine are free. Pro features (doctor PDF report, backup, medicine intake log, reminders for all medicines, Health Connect sync) require a subscription.
 
-**Subscription.** Purchases are made through the App Store or Google Play and charged to your store account. Price and period are shown before purchase: [PRICE AND PERIOD]. Subscriptions renew automatically until cancelled in your store account settings at least 24 hours before the period ends. Refunds follow store policy. Use "Restore purchase" in the app on a new device.
+**Subscription.** Purchases are made through the App Store or RuStore and charged to your store account. Price: 199 RUB per month or 1,490 RUB per year, shown before purchase. Subscriptions renew automatically until cancelled in your store account settings at least 24 hours before the period ends. Refunds follow store policy. Use "Restore purchase" in the app on a new device.
 
 **Backups.** You create and restore backups yourself. Restoring replaces the data currently on the device. The developer does not store backups and cannot recover them.
 

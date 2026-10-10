@@ -39,7 +39,7 @@
 
 Приложение не ставит диагнозов и не даёт рекомендаций. Оно не заменяет врача.
 
-Подписка Pro: [ЦЕНА и ПЕРИОД]. Оплата списывается с аккаунта App Store или Google Play. Подписка продлевается автоматически, отменить можно в настройках магазина.
+Подписка Pro: 199 ₽ в месяц или 1 490 ₽ в год. Оплата списывается с аккаунта магазина приложений (App Store или RuStore). Подписка продлевается автоматически, отменить можно в настройках магазина.
 Политика конфиденциальности: https://vishtal87.github.io/Vishtal87/bp-tracker/site/privacy.html. Условия: https://vishtal87.github.io/Vishtal87/bp-tracker/site/terms.html.
 
 ## Description (EN)
@@ -64,7 +64,7 @@ Your data stays on your phone. No sign-up, no ads.
 
 Health Diary is not a medical device. It does not diagnose or recommend treatment and does not replace your doctor.
 
-Pro subscription: [PRICE and PERIOD]. Payment is charged to your App Store or Google Play account. The subscription renews automatically; cancel in store settings.
+Pro subscription: 199 RUB per month or 1,490 RUB per year. Payment is charged to your App Store or RuStore account. The subscription renews automatically; cancel in store settings.
 Privacy policy: https://vishtal87.github.io/Vishtal87/bp-tracker/site/privacy.html. Terms: https://vishtal87.github.io/Vishtal87/bp-tracker/site/terms.html.
 
 ## Категория и возрастной рейтинг
