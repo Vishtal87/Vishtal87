@@ -32,7 +32,8 @@
         "com.htc.launcher.permission.READ_SETTINGS",
         "com.htc.launcher.permission.UPDATE_SHORTCUT",
         "com.huawei.android.launcher.permission.CHANGE_BADGE"
-      ]
+      ],
+      "allowBackup": false
     },
     "web": {
       "favicon": "./assets/favicon.png"
